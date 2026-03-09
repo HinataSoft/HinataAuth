@@ -1,0 +1,32 @@
+# Docker
+.dockerignore
+Dockerfile
+
+# Build outputs
+bin/
+obj/
+out/
+
+# IDE
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Test files
+HinataAuth.Tests/
+*.Tests.csproj
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+README.md
+LICENSE
+
+# Logs
+*.log
+
+# OS files
+Thumbs.db

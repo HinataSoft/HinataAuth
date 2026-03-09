@@ -1,0 +1,132 @@
+using HinataAuth.Models;
+
+namespace HinataAuth.Services;
+
+public interface IRefreshTokenStore
+{
+    RefreshToken CreateToken(string clientId, string? userId, string scope);
+    RefreshToken? ConsumeToken(string token, string clientId);
+    bool RevokeToken(string token, string clientId);
+    RefreshToken? GetToken(string token);
+}
+
+public class RefreshTokenStore : IRefreshTokenStore
+{
+    private readonly RefreshTokenConfig _config;
+    private readonly Dictionary<string, RefreshToken> _tokens = new();
+    private readonly object _lock = new();
+
+    public RefreshTokenStore(RefreshTokenConfig config)
+    {
+        _config = config;
+    }
+
+    public RefreshToken CreateToken(string clientId, string? userId, string scope)
+    {
+        var token = new RefreshToken
+        {
+            Token = GenerateToken(),
+            ClientId = clientId,
+            UserId = userId,
+            Scope = scope,
+            ExpiresAt = DateTime.UtcNow.AddDays(_config.ExpirationDays),
+            Used = false,
+            Revoked = false,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        lock (_lock)
+        {
+            _tokens[token.Token] = token;
+        }
+
+        return token;
+    }
+
+    public RefreshToken? ConsumeToken(string token, string clientId)
+    {
+        lock (_lock)
+        {
+            if (!_tokens.TryGetValue(token, out var refreshToken))
+            {
+                return null;
+            }
+
+            // Check if expired
+            if (refreshToken.ExpiresAt < DateTime.UtcNow)
+            {
+                _tokens.Remove(token);
+                return null;
+            }
+
+            // Check if already used
+            if (refreshToken.Used)
+            {
+                _tokens.Remove(token);
+                return null;
+            }
+
+            // Check if revoked
+            if (refreshToken.Revoked)
+            {
+                _tokens.Remove(token);
+                return null;
+            }
+
+            // Validate client_id
+            if (refreshToken.ClientId != clientId)
+            {
+                return null;
+            }
+
+            // Mark as used and remove (one-time use)
+            refreshToken.Used = true;
+            _tokens.Remove(token);
+
+            return refreshToken;
+        }
+    }
+
+    public bool RevokeToken(string token, string clientId)
+    {
+        lock (_lock)
+        {
+            if (!_tokens.TryGetValue(token, out var refreshToken))
+            {
+                return false;
+            }
+
+            // Validate client_id
+            if (refreshToken.ClientId != clientId)
+            {
+                return false;
+            }
+
+            // Mark as revoked and remove
+            refreshToken.Revoked = true;
+            _tokens.Remove(token);
+
+            return true;
+        }
+    }
+
+    public RefreshToken? GetToken(string token)
+    {
+        lock (_lock)
+        {
+            return _tokens.TryGetValue(token, out var refreshToken) ? refreshToken : null;
+        }
+    }
+
+    private static string GenerateToken()
+    {
+        // Generate a cryptographically secure token
+        var bytes = new byte[32];
+        using var rng = System.Security.Cryptography.RandomNumberGenerator.Create();
+        rng.GetBytes(bytes);
+        return Convert.ToBase64String(bytes)
+            .Replace("+", "-")
+            .Replace("/", "_")
+            .Replace("=", "");
+    }
+}

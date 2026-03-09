@@ -1,0 +1,210 @@
+using System.Web;
+using HinataAuth.Services;
+
+namespace HinataAuth.Endpoints;
+
+public static class AuthorizationEndpoint
+{
+    public static void MapAuthorizationEndpoint(this WebApplication app)
+    {
+        app.MapGet("/connect/authorize", HandleGet);
+        app.MapPost("/connect/authorize", HandlePost);
+    }
+
+    private static IResult HandleGet(HttpContext context, IAuthorizationCodeStore codeStore)
+    {
+        // Parse query parameters
+        var query = context.Request.Query;
+        var responseType = query["response_type"].ToString();
+        var clientId = query["client_id"].ToString();
+        var redirectUri = query["redirect_uri"].ToString();
+        var scope = query["scope"].ToString();
+        var state = query["state"].ToString();
+
+        // Validate required parameters
+        if (string.IsNullOrEmpty(responseType) || string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(redirectUri))
+        {
+            return Results.BadRequest(new
+            {
+                error = "invalid_request",
+                error_description = "Missing required parameters: response_type, client_id, redirect_uri"
+            });
+        }
+
+        // Only support code response type
+        if (responseType != "code")
+        {
+            return Results.BadRequest(new
+            {
+                error = "unsupported_response_type",
+                error_description = "Only response_type=code is supported"
+            });
+        }
+
+        // Validate client
+        if (!codeStore.ValidateClient(clientId))
+        {
+            return Results.BadRequest(new
+            {
+                error = "invalid_client",
+                error_description = "Unknown client_id"
+            });
+        }
+
+        // Validate redirect_uri
+        if (!codeStore.ValidateRedirectUri(clientId, redirectUri))
+        {
+            return Results.BadRequest(new
+            {
+                error = "invalid_request",
+                error_description = "Invalid redirect_uri"
+            });
+        }
+
+        // Get configured scopes
+        var configuredScopes = codeStore.GetScopes(clientId);
+        var requestedScopes = string.IsNullOrEmpty(scope)
+            ? configuredScopes?.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList() ?? new List<string>()
+            : scope.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+
+        // Validate requested scopes are within allowed scopes
+        if (!string.IsNullOrEmpty(configuredScopes))
+        {
+            var allowedScopes = configuredScopes.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToHashSet();
+            requestedScopes = requestedScopes.Where(s => allowedScopes.Contains(s)).ToList();
+
+            if (requestedScopes.Count == 0)
+            {
+                return Results.BadRequest(new
+                {
+                    error = "invalid_scope",
+                    error_description = "Invalid or missing scope"
+                });
+            }
+        }
+
+        // GET requests should always redirect to the authorization UI
+        // Consent decisions must be made via POST to prevent URL-based bypass
+        var authorizeUrl = $"/authorize.html?client_id={HttpUtility.UrlEncode(clientId)}&redirect_uri={HttpUtility.UrlEncode(redirectUri)}&scope={HttpUtility.UrlEncode(string.Join(" ", requestedScopes))}&state={HttpUtility.UrlEncode(state ?? "")}&response_type={HttpUtility.UrlEncode(responseType)}";
+        return Results.Redirect(authorizeUrl);
+    }
+
+    private static async Task<IResult> HandlePost(HttpContext context, IAuthorizationCodeStore codeStore, IClientCredentialsStore credentialsStore)
+    {
+        var form = await context.Request.ReadFormAsync();
+
+        var responseType = form["response_type"].ToString();
+        var clientId = form["client_id"].ToString();
+        var redirectUri = form["redirect_uri"].ToString();
+        var scope = form["scope"].ToString();
+        var state = form["state"].ToString();
+        var consent = form["consent"].ToString();
+        var username = form["username"].ToString();
+        var password = form["password"].ToString();
+
+        // Validate required parameters
+        if (string.IsNullOrEmpty(responseType) || string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(redirectUri))
+        {
+            return Results.BadRequest(new
+            {
+                error = "invalid_request",
+                error_description = "Missing required parameters"
+            });
+        }
+
+        // Validate user credentials against AuthCredentials
+        if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
+        {
+            return Results.BadRequest(new
+            {
+                error = "access_denied",
+                error_description = "Username and password are required"
+            });
+        }
+
+        // Validate credentials against AuthCredentials
+        if (!credentialsStore.ValidateUserCredentials(username, password))
+        {
+            return Results.BadRequest(new
+            {
+                error = "access_denied",
+                error_description = "Invalid username or password"
+            });
+        }
+
+        // Only support code response type
+        if (responseType != "code")
+        {
+            return Results.BadRequest(new
+            {
+                error = "unsupported_response_type",
+                error_description = "Only response_type=code is supported"
+            });
+        }
+
+        // Validate client
+        if (!codeStore.ValidateClient(clientId))
+        {
+            return Results.BadRequest(new
+            {
+                error = "invalid_client",
+                error_description = "Unknown client_id"
+            });
+        }
+
+        // Validate redirect_uri
+        if (!codeStore.ValidateRedirectUri(clientId, redirectUri))
+        {
+            return Results.BadRequest(new
+            {
+                error = "invalid_request",
+                error_description = "Invalid redirect_uri"
+            });
+        }
+
+        // Get configured scopes
+        var configuredScopes = codeStore.GetScopes(clientId);
+        var requestedScopes = string.IsNullOrEmpty(scope)
+            ? configuredScopes?.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList() ?? new List<string>()
+            : scope.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+
+        // Validate requested scopes
+        if (!string.IsNullOrEmpty(configuredScopes))
+        {
+            var allowedScopes = configuredScopes.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToHashSet();
+            requestedScopes = requestedScopes.Where(s => allowedScopes.Contains(s)).ToList();
+        }
+
+        // Handle denied consent
+        if (consent != "approved")
+        {
+            var errorUri = new UriBuilder(redirectUri);
+            var queryParams = HttpUtility.ParseQueryString(errorUri.Query);
+            queryParams["error"] = "access_denied";
+            queryParams["error_description"] = "The resource owner denied the request";
+            if (!string.IsNullOrEmpty(state))
+            {
+                queryParams["state"] = state;
+            }
+            errorUri.Query = queryParams.ToString();
+            return Results.Redirect(errorUri.ToString());
+        }
+
+        // User approved - create authorization code
+        // Use the authenticated username as the userId
+        var userId = username;
+        var authCode = codeStore.CreateCode(clientId, redirectUri, string.Join(" ", requestedScopes), userId);
+
+        // Build redirect URI with authorization code
+        var redirectUriBuilder = new UriBuilder(redirectUri);
+        var redirectQueryParams = HttpUtility.ParseQueryString(redirectUriBuilder.Query);
+        redirectQueryParams["code"] = authCode.Code;
+        if (!string.IsNullOrEmpty(state))
+        {
+            redirectQueryParams["state"] = state;
+        }
+        redirectUriBuilder.Query = redirectQueryParams.ToString();
+
+        return Results.Redirect(redirectUriBuilder.ToString());
+    }
+}
