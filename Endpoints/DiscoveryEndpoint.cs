@@ -8,6 +8,7 @@ public static class DiscoveryEndpoint
     public static void MapDiscoveryEndpoint(this WebApplication app)
     {
         app.MapGet("/.well-known/openid-configuration", Handle);
+        app.MapGet("/.well-known/oauth-authorization-server", Handle);
     }
 
     private static IResult Handle(HttpContext context, AuthCredentialsConfig authCredentialsConfig, JwtConfig jwtConfig)
@@ -37,11 +38,12 @@ public static class DiscoveryEndpoint
             subject_types_supported = new[] { "public" },
             id_token_signing_alg_values_supported = new[] { "RS256" },
             scopes_supported = scopesSupported,
+            userinfo_endpoint = $"{issuer}/connect/userinfo",
             token_endpoint_auth_methods_supported = new[] { "client_secret_post" },
             claims_supported = new[]
             {
                 "sub", "iss", "aud", "exp", "iat", "jti",
-                "scope", "client_id"
+                "scope", "client_id", "name", "email"
             },
             code_challenge_methods_supported = new[] { "S256" }
         };

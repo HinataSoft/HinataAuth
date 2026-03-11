@@ -4,7 +4,7 @@ namespace HinataAuth.Services;
 
 public interface IRefreshTokenStore
 {
-    RefreshToken CreateToken(string clientId, string? userId, string scope);
+    RefreshToken CreateToken(string clientId, string? userId, string scope, Dictionary<string, string>? userClaims = null);
     RefreshToken? ConsumeToken(string token, string clientId);
     bool RevokeToken(string token, string clientId);
     RefreshToken? GetToken(string token);
@@ -21,7 +21,7 @@ public class RefreshTokenStore : IRefreshTokenStore
         _config = config;
     }
 
-    public RefreshToken CreateToken(string clientId, string? userId, string scope)
+    public RefreshToken CreateToken(string clientId, string? userId, string scope, Dictionary<string, string>? userClaims = null)
     {
         var token = new RefreshToken
         {
@@ -29,6 +29,7 @@ public class RefreshTokenStore : IRefreshTokenStore
             ClientId = clientId,
             UserId = userId,
             Scope = scope,
+            UserClaims = userClaims ?? new Dictionary<string, string>(),
             ExpiresAt = DateTime.UtcNow.AddDays(_config.ExpirationDays),
             Used = false,
             Revoked = false,

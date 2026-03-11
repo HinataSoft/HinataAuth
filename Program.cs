@@ -110,6 +110,7 @@ public class Program
         app.MapJwksEndpoint();
         app.MapDiscoveryEndpoint();
         app.MapHealthEndpoint();
+        app.MapUserInfoEndpoint();
 
         app.Run();
     }

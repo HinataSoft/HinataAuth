@@ -194,7 +194,12 @@ public static class AuthorizationEndpoint
         // User approved - create authorization code
         // Use the authenticated username as the userId
         var userId = username;
-        var authCode = codeStore.CreateCode(clientId, redirectUri, string.Join(" ", requestedScopes), userId);
+
+        // Get user claims from credentials store
+        var userClaims = credentialsStore.GetUserClaims(username);
+
+        // Create authorization code with user claims
+        var authCode = codeStore.CreateCode(clientId, redirectUri, string.Join(" ", requestedScopes), userId, userClaims);
 
         // Build redirect URI with authorization code
         var redirectUriBuilder = new UriBuilder(redirectUri);

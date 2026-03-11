@@ -59,10 +59,20 @@ All configuration is in `appsettings.json`:
 ```json
 "AuthCredentials": {
   "credentials": [
-    { "id": "user1", "secret": "password", "scopes": "read write" }
+    { 
+      "id": "user1", 
+      "secret": "password", 
+      "scopes": "read write",
+      "claims": {
+        "name": "John Doe",
+        "email": "john@example.com"
+      }
+    }
   ]
 }
 ```
+
+You can configure custom claims (like `name` and `email`) that will be included in the JWT access token and returned by the UserInfo endpoint.
 
 ### AuthorizationCode - OAuth client definitions
 
@@ -115,6 +125,7 @@ Leave empty for no prefix.
 | `GET /connect/authorize` | Authorization endpoint (user login) |
 | `POST /connect/authorize` | Authorization with credentials |
 | `POST /connect/token` | Token endpoint (all grant types) |
+| `GET /connect/userinfo` | UserInfo endpoint (requires valid JWT) |
 | `GET /.well-known/openid-configuration` | OIDC Discovery |
 | `GET /.well-known/jwks` | JSON Web Key Set |
 | `GET /health` | Health check |

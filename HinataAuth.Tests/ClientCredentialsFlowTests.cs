@@ -294,7 +294,7 @@ public class ClientCredentialsFlowTests
         var tokenResponse = JsonSerializer.Deserialize<JsonElement>(content);
         
         Assert.True(tokenResponse.TryGetProperty("scope", out var scope));
-        Assert.Equal("auth", scope.GetString());
+        Assert.Equal("auth profile email", scope.GetString());
     }
 
     [Fact]

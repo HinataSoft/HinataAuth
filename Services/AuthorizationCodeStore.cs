@@ -9,13 +9,14 @@ public class AuthorizationCode
     public string RedirectUri { get; set; } = string.Empty;
     public string Scope { get; set; } = string.Empty;
     public string? UserId { get; set; }
+    public Dictionary<string, string> UserClaims { get; set; } = new();
     public DateTime ExpiresAt { get; set; }
     public bool Used { get; set; }
 }
 
 public interface IAuthorizationCodeStore
 {
-    AuthorizationCode CreateCode(string clientId, string redirectUri, string scope, string? userId);
+    AuthorizationCode CreateCode(string clientId, string redirectUri, string scope, string? userId, Dictionary<string, string>? userClaims = null);
     AuthorizationCode? ConsumeCode(string code, string clientId, string redirectUri);
     bool ValidateClient(string clientId, string? clientSecret = null);
     string? GetScopes(string clientId);
@@ -33,7 +34,7 @@ public class AuthorizationCodeStore : IAuthorizationCodeStore
         _config = config;
     }
 
-    public AuthorizationCode CreateCode(string clientId, string redirectUri, string scope, string? userId)
+    public AuthorizationCode CreateCode(string clientId, string redirectUri, string scope, string? userId, Dictionary<string, string>? userClaims = null)
     {
         var code = new AuthorizationCode
         {
@@ -42,6 +43,7 @@ public class AuthorizationCodeStore : IAuthorizationCodeStore
             RedirectUri = redirectUri,
             Scope = scope,
             UserId = userId,
+            UserClaims = userClaims ?? new Dictionary<string, string>(),
             ExpiresAt = DateTime.UtcNow.AddMinutes(_config.CodeExpirationMinutes),
             Used = false
         };

@@ -121,6 +121,12 @@ public static class TokenEndpoint
             claims.Add(new Claim("scope", scope));
         }
 
+        // Add user claims from authorization code
+        foreach (var claim in authCode.UserClaims)
+        {
+            claims.Add(new Claim(claim.Key, claim.Value));
+        }
+
         // Create token
         var tokenDescriptor = new SecurityTokenDescriptor
         {
@@ -136,7 +142,7 @@ public static class TokenEndpoint
         var accessToken = tokenHandler.WriteToken(token);
 
         // Create refresh token (with rotation - new token each time)
-        var refreshToken = refreshTokenStore.CreateToken(clientId, authCode.UserId, scopeString);
+        var refreshToken = refreshTokenStore.CreateToken(clientId, authCode.UserId, scopeString, authCode.UserClaims);
 
         Console.WriteLine("Issued a token: " + accessToken);
 
@@ -281,6 +287,12 @@ public static class TokenEndpoint
             claims.Add(new Claim("scope", scope));
         }
 
+        // Add user claims from refresh token
+        foreach (var claim in refreshToken.UserClaims)
+        {
+            claims.Add(new Claim(claim.Key, claim.Value));
+        }
+
         // Create new access token
         var tokenDescriptor = new SecurityTokenDescriptor
         {
@@ -296,7 +308,7 @@ public static class TokenEndpoint
         var accessToken = tokenHandler.WriteToken(token);
 
         // Issue a new refresh token (refresh token rotation for security)
-        var newRefreshToken = refreshTokenStore.CreateToken(clientId, refreshToken.UserId, scopeString);
+        var newRefreshToken = refreshTokenStore.CreateToken(clientId, refreshToken.UserId, scopeString, refreshToken.UserClaims);
 
         return Results.Ok(new
         {

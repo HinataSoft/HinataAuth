@@ -7,6 +7,7 @@ public interface IClientCredentialsStore
     bool ValidateClientCredentials(string clientId, string clientSecret);
     bool ValidateUserCredentials(string username, string password);
     string? GetScopes(string clientId);
+    Dictionary<string, string> GetUserClaims(string userId);
 }
 
 public class ClientCredentialsStore : IClientCredentialsStore
@@ -34,5 +35,11 @@ public class ClientCredentialsStore : IClientCredentialsStore
     {
         var client = _config.Credentials.FirstOrDefault(c => c.Id == clientId);
         return client?.Scopes;
+    }
+
+    public Dictionary<string, string> GetUserClaims(string userId)
+    {
+        var credential = _config.Credentials.FirstOrDefault(c => c.Id == userId);
+        return credential?.Claims ?? new Dictionary<string, string>();
     }
 }
