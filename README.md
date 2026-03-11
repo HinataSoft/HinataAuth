@@ -54,7 +54,7 @@ docker run -p 8080:8080 hinatasoft/hinata-auth
 
 All configuration is in `appsettings.json`:
 
-### AuthCredentials - User accounts for authorization code flow
+### AuthCredentials - User/client accounts both for authorization code flow and client credentials flow
 
 ```json
 "AuthCredentials": {
@@ -73,6 +73,11 @@ All configuration is in `appsettings.json`:
 ```
 
 You can configure custom claims (like `name` and `email`) that will be included in the JWT access token and returned by the UserInfo endpoint.
+
+These credentials are shared both for authorization code flow and for client credentials flow.
+Thus, `id` is both username and client-id, `secret` is both password and client-secret.
+
+This way, one can log in somewhere as a user and, at the same time, provide the same set of credentials to some automated agent to act in his/her name.
 
 ### AuthorizationCode - OAuth client definitions
 
