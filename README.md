@@ -1,6 +1,8 @@
 # HinataAuth
 
-A simple but capable OAuth 2.0 / OpenID Connect Authorization Server built with ASP.NET 10.0.
+[![Tests](https://github.com/HinataSoft/HinataAuth/actions/workflows/test.yml/badge.svg)](https://github.com/HinataSoft/HinataAuth/actions/workflows/test.yml)
+
+A simple but capable OAuth 2.0 / OpenID Connect Authorization Server built with ASP.NET
 
 ## Overview
 
@@ -25,6 +27,8 @@ HinataAuth is designed for:
 
 > **Note**: For production deployments, consider using established solutions like Keycloak, Auth0, or IdentityServer. HinataAuth prioritizes simplicity over enterprise features.
 
+> **Note**: JWT key (JWK) is generated fresh new at the app startup. That implies that tokens issued before a restart are no more valid.
+
 ## Quick Start
 
 ```bash
@@ -36,6 +40,15 @@ dotnet run
 
 # Server starts at http://localhost:5999
 ```
+
+## Docker
+
+```bash
+# Pull and run the latest image
+docker run -p 5999:5999 hinatasoft/hinata-auth
+```
+
+[Docker Hub](https://hub.docker.com/r/hinatasoft/hinata-auth)
 
 ## Configuration
 
