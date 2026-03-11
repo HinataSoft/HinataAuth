@@ -38,14 +38,14 @@ dotnet build
 # Run the server
 dotnet run
 
-# Server starts at http://localhost:5999
+# Server starts at http://localhost:5999 (Debug) or http://localhost:5000 (Release)
 ```
 
 ## Docker
 
 ```bash
 # Pull and run the latest image
-docker run -p 5999:5999 hinatasoft/hinata-auth
+docker run -p 8080:8080 hinatasoft/hinata-auth
 ```
 
 [Docker Hub](https://hub.docker.com/r/hinatasoft/hinata-auth)
