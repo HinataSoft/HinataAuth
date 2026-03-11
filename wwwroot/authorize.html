@@ -153,6 +153,15 @@
     </div>
 
     <script>
+        // Get the base path from the current page location
+        function getBasePath() {
+            const path = window.location.pathname;
+            // Remove the filename (e.g., /authorize.html) to get the base path
+            const lastSlash = path.lastIndexOf('/');
+            return lastSlash > 0 ? path.substring(0, lastSlash) : '';
+        }
+        const basePath = getBasePath();
+
         // Parse query parameters from URL
         const params = new URLSearchParams(window.location.search);
         const clientId = params.get('client_id');
@@ -227,7 +236,7 @@
                 formData.append('username', username);
                 formData.append('password', password);
                 
-                const response = await fetch('/connect/authorize', {
+                const response = await fetch(basePath + '/connect/authorize', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded'

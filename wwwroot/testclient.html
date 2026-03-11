@@ -111,6 +111,15 @@
     </div>
 
     <script>
+        // Get the base path from the current page location
+        function getBasePath() {
+            const path = window.location.pathname;
+            // Remove the filename (e.g., /testclient.html) to get the base path
+            const lastSlash = path.lastIndexOf('/');
+            return lastSlash > 0 ? path.substring(0, lastSlash) : '';
+        }
+        const basePath = getBasePath();
+
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -128,7 +137,7 @@
             }
 
             try {
-                const response = await fetch('/connect/token', {
+                const response = await fetch(basePath + '/connect/token', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded'

@@ -160,6 +160,15 @@
     </div>
 
     <script>
+        // Get the base path from the current page location
+        function getBasePath() {
+            const path = window.location.pathname;
+            // Remove the filename (e.g., /testauth.html) to get the base path
+            const lastSlash = path.lastIndexOf('/');
+            return lastSlash > 0 ? path.substring(0, lastSlash) : '';
+        }
+        const basePath = getBasePath();
+
         // This page's URL - used as redirect_uri
         const thisPageUrl = window.location.href.split('?')[0];
 
@@ -198,7 +207,7 @@
             const state = generateRandomState();
 
             // Build authorization URL
-            const authUrl = new URL('/connect/authorize', window.location.origin);
+            const authUrl = new URL(basePath + '/connect/authorize', window.location.origin);
             authUrl.searchParams.set('response_type', 'code');
             authUrl.searchParams.set('client_id', clientId);
             authUrl.searchParams.set('redirect_uri', thisPageUrl);
@@ -234,7 +243,7 @@
             formData.append('client_secret', clientSecret);
 
             try {
-                const response = await fetch('/connect/token', {
+                const response = await fetch(basePath + '/connect/token', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded'

@@ -81,6 +81,20 @@ All configuration is in `appsettings.json`:
 }
 ```
 
+### PathBase - Base path for redirects (optional)
+
+```json
+"PathBase": "/auth"
+```
+
+This setting affects only 302 Redirect results from `/connect/authorize` to `/<pathBase>/authorize.html`.
+
+This is convenient when using HinataAuth behind a reverse proxy with a subpath. 
+
+Leave empty for no prefix.
+
+*Note:* Static HTML pages also take pathBase into consideration, however it is derived directly from the URL used.
+
 ## API Endpoints
 
 | Endpoint | Description |

@@ -11,7 +11,7 @@ public static class AuthorizationEndpoint
         app.MapPost("/connect/authorize", HandlePost);
     }
 
-    private static IResult HandleGet(HttpContext context, IAuthorizationCodeStore codeStore)
+    private static IResult HandleGet(HttpContext context, IAuthorizationCodeStore codeStore, IConfiguration configuration)
     {
         // Parse query parameters
         var query = context.Request.Query;
@@ -85,7 +85,8 @@ public static class AuthorizationEndpoint
 
         // GET requests should always redirect to the authorization UI
         // Consent decisions must be made via POST to prevent URL-based bypass
-        var authorizeUrl = $"/authorize.html?client_id={HttpUtility.UrlEncode(clientId)}&redirect_uri={HttpUtility.UrlEncode(redirectUri)}&scope={HttpUtility.UrlEncode(string.Join(" ", requestedScopes))}&state={HttpUtility.UrlEncode(state ?? "")}&response_type={HttpUtility.UrlEncode(responseType)}";
+        var pathBase = configuration["PathBase"] ?? "";
+        var authorizeUrl = $"{pathBase}/authorize.html?client_id={HttpUtility.UrlEncode(clientId)}&redirect_uri={HttpUtility.UrlEncode(redirectUri)}&scope={HttpUtility.UrlEncode(string.Join(" ", requestedScopes))}&state={HttpUtility.UrlEncode(state ?? "")}&response_type={HttpUtility.UrlEncode(responseType)}";
         return Results.Redirect(authorizeUrl);
     }
 
