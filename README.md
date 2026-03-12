@@ -137,7 +137,7 @@ Leave empty for no prefix.
 
 ## Playground
 
-Navigate to `testclient.html` to test client credentials flow and to `testauth.html` to test authorization code flow.
+Use `test.html` to test authorization code flow or client credentials flow.
 
 ## Testing
 

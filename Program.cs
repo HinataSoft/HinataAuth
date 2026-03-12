@@ -16,11 +16,11 @@ public class Program
         var builder = WebApplication.CreateBuilder(args);
 
         // Load configuration
-        var authCredentialsConfig = builder.Configuration.GetSection("AuthCredentials").Get<AuthCredentialsConfig>() 
+        var authCredentialsConfig = builder.Configuration.GetSection("AuthCredentials").Get<AuthCredentialsConfig>()
             ?? new AuthCredentialsConfig();
-        var authorizationCodeConfig = builder.Configuration.GetSection("AuthorizationCode").Get<AuthorizationCodeConfig>() 
+        var authorizationCodeConfig = builder.Configuration.GetSection("AuthorizationCode").Get<AuthorizationCodeConfig>()
             ?? new AuthorizationCodeConfig();
-        var jwtConfig = builder.Configuration.GetSection("Jwt").Get<JwtConfig>() 
+        var jwtConfig = builder.Configuration.GetSection("Jwt").Get<JwtConfig>()
             ?? new JwtConfig();
         var refreshTokenConfig = jwtConfig.RefreshToken ?? new RefreshTokenConfig();
 
@@ -88,7 +88,7 @@ public class Program
         // This must run before routing to ensure body is available to endpoints
         app.Use(async (context, next) =>
         {
-            if (context.Request.Method == "POST" 
+            if (context.Request.Method == "POST"
                 && context.Request.ContentType?.Contains("application/x-www-form-urlencoded") == true)
             {
                 // Enable buffering for all form POSTs to allow re-reading
@@ -99,6 +99,9 @@ public class Program
         });
 
         app.UseRouting();
+        app.UseDefaultFiles(new DefaultFilesOptions() {
+            DefaultFileNames = [ "test.html" ],
+        });
         app.UseStaticFiles();
         app.UseCors("AllowAll");
         app.UseAuthentication();

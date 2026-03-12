@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HinataAuth - OAuth Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 500px;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 1.5rem;
+        }
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid #e0e0e0;
+            margin-bottom: 1.5rem;
+        }
+        .tab {
+            flex: 1;
+            padding: 0.75rem;
+            text-align: center;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-size: 1rem;
+            color: #666;
+            transition: all 0.2s;
+        }
+        .tab:hover {
+            color: #007bff;
+        }
+        .tab.active {
+            color: #007bff;
+            border-bottom: 2px solid #007bff;
+            margin-bottom: -2px;
+            font-weight: 600;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #555;
+            font-weight: 500;
+        }
+        input[type="text"],
+        input[type="password"] {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1rem;
+            box-sizing: border-box;
+        }
+        input[type="text"]:focus,
+        input[type="password"]:focus {
+            outline: none;
+            border-color: #007bff;
+        }
+        button {
+            width: 100%;
+            padding: 0.75rem;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 1rem;
+            cursor: pointer;
+            margin-top: 1rem;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .info-box {
+            background: #e7f3ff;
+            border: 1px solid #b3d9ff;
+            border-radius: 4px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+            color: #004080;
+        }
+        .result {
+            margin-top: 1rem;
+            padding: 1rem;
+            border-radius: 4px;
+            display: none;
+        }
+        .result.success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .result.error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .result.waiting {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        .token-display {
+            word-break: break-all;
+            font-family: monospace;
+            font-size: 0.85rem;
+            max-height: 200px;
+            overflow-y: auto;
+            background: rgba(0,0,0,0.05);
+            padding: 0.5rem;
+            border-radius: 4px;
+            margin-top: 0.5rem;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>HinataAuth - OAuth Test</h1>
+
+        <div class="tabs">
+            <button class="tab active" data-tab="auth-code">Authorization Code</button>
+            <button class="tab" data-tab="client-credentials">Client Credentials</button>
+        </div>
+
+        <!-- Authorization Code Flow Tab -->
+        <div id="auth-code-tab" class="tab-content active">
+            <div class="info-box">
+                <strong>How it works:</strong><br>
+                1. Click "Start Authorization" to begin<br>
+                2. You'll be redirected to authorize.html<br>
+                3. Authorize the application<br>
+                4. You'll be redirected back with the token
+            </div>
+
+            <div id="authCodeConfigForm">
+                <div class="form-group">
+                    <span>Credentials for authorization to perform Authorization Code Flow (username and password are going to be requested later)</span>
+                </div>
+                <div class="form-group">
+                    <label for="authClientId">Client ID</label>
+                    <input type="text" id="authClientId" value="auth-client" required>
+                </div>
+                <div class="form-group">
+                    <label for="authClientSecret">Client Secret</label>
+                    <input type="text" id="authClientSecret" value="auth-secret" required>
+                </div>
+                <div class="form-group">
+                    <label for="authScope">Required scopes (optional)</label>
+                    <input type="text" id="authScope" placeholder="auth">
+                </div>
+                <button type="button" onclick="startAuthorization()">Start Authorization</button>
+            </div>
+
+            <div id="authCodeWaitingMessage" class="result waiting">
+                Processing authorization...
+            </div>
+
+            <div id="authCodeSuccessResult" class="result success">
+                <strong>Authorization Successful!</strong><br><br>
+                Access Token:<br>
+                <div class="token-display" id="authAccessToken"></div>
+                <br>
+                Token Type: <span id="authTokenType"></span><br>
+                Expires In: <span id="authExpiresIn"></span> seconds<br>
+                Scope: <span id="authTokenScope"></span>
+            </div>
+
+            <div id="authCodeErrorResult" class="result error">
+                <strong>Error:</strong> <span id="authErrorMessage"></span>
+            </div>
+        </div>
+
+        <!-- Client Credentials Flow Tab -->
+        <div id="client-credentials-tab" class="tab-content">
+            <div class="form-group">
+                <label for="clientId">Client ID</label>
+                <input type="text" id="clientId" name="clientId" required>
+            </div>
+            <div class="form-group">
+                <label for="clientSecret">Client Secret</label>
+                <input type="password" id="clientSecret" name="clientSecret" required>
+            </div>
+            <div class="form-group">
+                <label for="scope">Scope (optional)</label>
+                <input type="text" id="scope" name="scope" placeholder="read write">
+            </div>
+            <button type="button" onclick="getClientCredentialsToken()">Get Token</button>
+
+            <div id="clientResult" class="result"></div>
+        </div>
+    </div>
+
+    <script>
+        // Get the base path from the current page location
+        function getBasePath() {
+            const path = window.location.pathname;
+            const lastSlash = path.lastIndexOf('/');
+            return lastSlash > 0 ? path.substring(0, lastSlash) : '';
+        }
+        const basePath = getBasePath();
+
+        // This page's URL - used as redirect_uri for auth code flow
+        const thisPageUrl = window.location.href.split('?')[0];
+
+        // Tab switching logic
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                // Remove active class from all tabs
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                // Remove active class from all tab content
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+                // Add active class to clicked tab
+                tab.classList.add('active');
+                // Show corresponding content
+                document.getElementById(tab.dataset.tab + '-tab').classList.add('active');
+            });
+        });
+
+        // Check for authorization code in URL on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            const params = new URLSearchParams(window.location.search);
+            const code = params.get('code');
+            const error = params.get('error');
+            const errorDescription = params.get('error_description');
+
+            if (code) {
+                // Switch to auth code tab and exchange code
+                switchToTab('auth-code');
+                exchangeCodeForToken(code);
+            } else if (error) {
+                // Switch to auth code tab and show error
+                switchToTab('auth-code');
+                showAuthCodeError(errorDescription || error);
+            }
+        });
+
+        function switchToTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+            document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+            document.getElementById(tabName + '-tab').classList.add('active');
+        }
+
+        // ==================== Authorization Code Flow ====================
+
+        function hideAllAuthCodeResults() {
+            document.getElementById('authCodeConfigForm').classList.remove('hidden');
+            document.getElementById('authCodeWaitingMessage').style.display = 'none';
+            document.getElementById('authCodeSuccessResult').classList.remove('success');
+            document.getElementById('authCodeSuccessResult').style.display = 'none';
+            document.getElementById('authCodeErrorResult').classList.remove('error');
+            document.getElementById('authCodeErrorResult').style.display = 'none';
+        }
+
+        function startAuthorization() {
+            // Hide all result boxes first
+            hideAllAuthCodeResults();
+
+            const clientId = document.getElementById('authClientId').value;
+            const clientSecret = document.getElementById('authClientSecret').value;
+            const scope = document.getElementById('authScope').value;
+
+            if (!clientId || !clientSecret) {
+                alert('Please enter client ID and secret');
+                return;
+            }
+
+            // Store client credentials for later token exchange
+            sessionStorage.setItem('oauth_client_id', clientId);
+            sessionStorage.setItem('oauth_client_secret', clientSecret);
+
+            // Generate state for CSRF protection
+            const state = generateRandomState();
+
+            // Build authorization URL
+            const authUrl = new URL(basePath + '/connect/authorize', window.location.origin);
+            authUrl.searchParams.set('response_type', 'code');
+            authUrl.searchParams.set('client_id', clientId);
+            authUrl.searchParams.set('redirect_uri', thisPageUrl);
+            authUrl.searchParams.set('state', state);
+
+            if (scope) {
+                authUrl.searchParams.set('scope', scope);
+            }
+
+            // Redirect to authorization endpoint
+            window.location.href = authUrl.toString();
+        }
+
+        async function exchangeCodeForToken(code) {
+            // Show waiting message
+            document.getElementById('authCodeConfigForm').classList.add('hidden');
+            document.getElementById('authCodeWaitingMessage').style.display = 'block';
+
+            const clientId = sessionStorage.getItem('oauth_client_id');
+            const clientSecret = sessionStorage.getItem('oauth_client_secret');
+
+            if (!clientId || !clientSecret) {
+                showAuthCodeError('Client credentials not found. Please start the authorization process again.');
+                return;
+            }
+
+            // Build token request
+            const formData = new URLSearchParams();
+            formData.append('grant_type', 'authorization_code');
+            formData.append('code', code);
+            formData.append('redirect_uri', thisPageUrl);
+            formData.append('client_id', clientId);
+            formData.append('client_secret', clientSecret);
+
+            try {
+                const response = await fetch(basePath + '/connect/token', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Hide all other results, show success
+                    document.getElementById('authCodeWaitingMessage').style.display = 'none';
+                    document.getElementById('authCodeErrorResult').style.display = 'none';
+                    document.getElementById('authCodeSuccessResult').classList.add('success');
+                    document.getElementById('authCodeSuccessResult').style.display = 'block';
+
+                    document.getElementById('authAccessToken').textContent = data.access_token;
+                    document.getElementById('authTokenType').textContent = data.token_type;
+                    document.getElementById('authExpiresIn').textContent = data.expires_in;
+                    document.getElementById('authTokenScope').textContent = data.scope || '(none)';
+
+                    // Clear stored credentials
+                    sessionStorage.removeItem('oauth_client_id');
+                    sessionStorage.removeItem('oauth_client_secret');
+
+                    // Clean up URL
+                    window.history.replaceState({}, document.title, thisPageUrl);
+                } else {
+                    showAuthCodeError(data.error_description || data.error || 'Unknown error');
+                }
+            } catch (error) {
+                showAuthCodeError(error.message);
+            }
+        }
+
+        function showAuthCodeError(message) {
+            document.getElementById('authCodeConfigForm').classList.add('hidden');
+            document.getElementById('authCodeWaitingMessage').style.display = 'none';
+            document.getElementById('authCodeErrorResult').classList.add('error');
+            document.getElementById('authCodeErrorResult').style.display = 'block';
+            document.getElementById('authErrorMessage').textContent = message;
+        }
+
+        // ==================== Client Credentials Flow ====================
+
+        async function getClientCredentialsToken() {
+            const clientId = document.getElementById('clientId').value;
+            const clientSecret = document.getElementById('clientSecret').value;
+            const scope = document.getElementById('scope').value;
+            const resultDiv = document.getElementById('clientResult');
+
+            const formData = new URLSearchParams();
+            formData.append('grant_type', 'client_credentials');
+            formData.append('client_id', clientId);
+            formData.append('client_secret', clientSecret);
+            if (scope) {
+                formData.append('scope', scope);
+            }
+
+            try {
+                const response = await fetch(basePath + '/connect/token', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = `
+                        <strong>Success!</strong><br>
+                        Access Token:<br>
+                        <div class="token-display">${data.access_token}</div>
+                        <br>
+                        Token Type: ${data.token_type}<br>
+                        Expires In: ${data.expires_in} seconds
+                    `;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.innerHTML = `<strong>Error:</strong> ${data.error_description || data.error || 'Unknown error'}`;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `<strong>Error:</strong> ${error.message}`;
+            }
+        }
+
+        // ==================== Utilities ====================
+
+        function generateRandomState() {
+            const array = new Uint8Array(16);
+            crypto.getRandomValues(array);
+            return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+        }
+    </script>
+</body>
+</html>

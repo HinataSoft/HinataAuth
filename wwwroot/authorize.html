@@ -134,7 +134,7 @@
             <p><strong>Redirect URI:</strong> <span id="redirectUri"></span></p>
         </div>
         
-        <div class="form-group" id="credentialsSection">
+        <div class="form-group">
             <label for="username">Username</label>
             <input type="text" id="username" name="username" required>
             <label for="password">Password</label>
@@ -161,6 +161,20 @@
             return lastSlash > 0 ? path.substring(0, lastSlash) : '';
         }
         const basePath = getBasePath();
+
+        // Handle Enter key on username and password fields
+        document.getElementById('username').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                document.getElementById('password').focus();
+            }
+        });
+        document.getElementById('password').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                approve();
+            }
+        });
 
         // Parse query parameters from URL
         const params = new URLSearchParams(window.location.search);
