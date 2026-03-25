@@ -268,7 +268,8 @@ public class ClientCredentialsFlowTests
         Assert.Equal("HinataAuth", jwtToken.Issuer);
         Assert.Contains(jwtToken.Audiences, a => a == "HinataAuth");
         Assert.Contains(jwtToken.Claims, c => c.Type == "scope" && c.Value == "auth");
-        
+        Assert.Contains(jwtToken.Claims, c => c.Type == "sub_type" && c.Value == "client");
+
         // Verify expiration
         Assert.True(jwtToken.ValidTo > DateTime.UtcNow);
     }

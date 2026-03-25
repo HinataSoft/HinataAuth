@@ -135,6 +135,16 @@ Leave empty for no prefix.
 | `GET /.well-known/jwks` | JSON Web Key Set |
 | `GET /health` | Health check |
 
+## Token Claims
+
+Access tokens include a `sub_type` claim to distinguish the authentication method:
+
+| Flow | `sub_type` | Description |
+|------|-----------|-------------|
+| Authorization Code | `identity` | User-authenticated token |
+| Client Credentials | `client` | Machine-to-machine token |
+| Refresh Token | *(copied)* | Preserves the original `sub_type` |
+
 ## Playground
 
 Use `test.html` to test authorization code flow or client credentials flow.

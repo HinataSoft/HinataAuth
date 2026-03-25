@@ -674,7 +674,8 @@ public class AuthorizationCodeFlowTests : IClassFixture<CustomWebApplicationFact
         Assert.Contains(jwtToken.Audiences, a => a == "HinataAuth");
         Assert.Contains(jwtToken.Claims, c => c.Type == "scope" && c.Value == TestScope);
         Assert.Contains(jwtToken.Claims, c => c.Type == "client_id" && c.Value == TestClientId);
-        
+        Assert.Contains(jwtToken.Claims, c => c.Type == "sub_type" && c.Value == "identity");
+
         // Verify expiration
         Assert.True(jwtToken.ValidTo > DateTime.UtcNow);
     }

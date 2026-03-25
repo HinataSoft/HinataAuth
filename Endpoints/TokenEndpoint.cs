@@ -112,7 +112,8 @@ public static class TokenEndpoint
             {
                 new(JwtRegisteredClaimNames.Sub, authCode.UserId ?? clientId),
                 new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-                new("client_id", clientId)
+                new("client_id", clientId),
+                new("sub_type", "identity")
             };
 
         // Add scope claims
@@ -142,7 +143,11 @@ public static class TokenEndpoint
         var accessToken = tokenHandler.WriteToken(token);
 
         // Create refresh token (with rotation - new token each time)
-        var refreshToken = refreshTokenStore.CreateToken(clientId, authCode.UserId, scopeString, authCode.UserClaims);
+        var refreshUserClaims = new Dictionary<string, string>(authCode.UserClaims)
+        {
+            ["sub_type"] = "identity"
+        };
+        var refreshToken = refreshTokenStore.CreateToken(clientId, authCode.UserId, scopeString, refreshUserClaims);
 
         Console.WriteLine("Issued a token: " + accessToken);
 
@@ -198,7 +203,8 @@ public static class TokenEndpoint
         {
             new(JwtRegisteredClaimNames.Sub, clientId),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-            new("client_id", clientId)
+            new("client_id", clientId),
+            new("sub_type", "client")
         };
 
         // Add scope claims
@@ -222,7 +228,7 @@ public static class TokenEndpoint
         var accessToken = tokenHandler.WriteToken(token);
 
         // Create refresh token (with rotation - new token each time)
-        var refreshToken = refreshTokenStore.CreateToken(clientId, null, scopeString);
+        var refreshToken = refreshTokenStore.CreateToken(clientId, null, scopeString, new Dictionary<string, string> { ["sub_type"] = "client" });
 
         return Results.Ok(new
         {
