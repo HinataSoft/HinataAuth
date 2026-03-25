@@ -22,7 +22,7 @@ WORKDIR /app
 COPY --from=build /app/publish .
 
 # Expose the default port
-EXPOSE 5999
+EXPOSE 8080
 
 # Set the entry point
 ENTRYPOINT ["dotnet", "HinataAuth.dll"]
