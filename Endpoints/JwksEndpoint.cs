@@ -13,7 +13,7 @@ public static class JwksEndpoint
     public static void MapJwksEndpoint(this WebApplication app)
     {
         app.MapGet("/.well-known/jwks", Handle);
-        app.MapGet("/connect/jwks", Handle);
+        app.MapGet("/connect/jwks", HandleNonStandard);
     }
 
     public static void InitializeRsaKey(RSA rsaKey, string keyId)
@@ -45,6 +45,35 @@ public static class JwksEndpoint
                     n = Base64UrlEncoder.Encode(rsaParams.Modulus),
                     e = Base64UrlEncoder.Encode(rsaParams.Exponent)
                 }
+            }
+        };
+
+        return Results.Json(jwks, new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        });
+    }
+
+    private static IResult HandleNonStandard()
+    {
+        if (_rsaKey == null || _keyId == null)
+        {
+            return Results.Json(new { error = "JWKS not initialized" }, statusCode: 500);
+        }
+
+        var rsaParams = _rsaKey.ExportParameters(false);
+
+        // Create JWK parameters
+        var jwks = new[]
+        {
+            new
+            {
+                kty = "RSA",
+                use = "sig",
+                kid = _keyId,
+                alg = "RS256",
+                n = Convert.ToBase64String(rsaParams.Modulus ?? []),
+                e = Convert.ToBase64String(rsaParams.Exponent ?? [])
             }
         };
 
