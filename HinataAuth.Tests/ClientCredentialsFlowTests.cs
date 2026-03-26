@@ -68,9 +68,9 @@ public class ClientCredentialsFlowTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         
         var content = await response.Content.ReadAsStringAsync();
-        var jwks = JsonSerializer.Deserialize<JsonElement>(content);
-        
-        Assert.True(jwks.TryGetProperty("keys", out var keys));
+        var keys = JsonSerializer.Deserialize<JsonElement>(content);
+
+        Assert.Equal(JsonValueKind.Array, keys.ValueKind);
         Assert.Single(keys.EnumerateArray().ToList());
     }
 

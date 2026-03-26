@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text.Json;
 
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -24,11 +25,11 @@ public class Program
             ?? new JwtConfig();
         var refreshTokenConfig = jwtConfig.RefreshToken ?? new RefreshTokenConfig();
 
-        // Generate RSA key for JWT signing and JWKS
-        var rsaKey = RSA.Create(2048);
+        // Load or generate RSA key for JWT signing and JWKS
+        var (rsaKey, keyId) = LoadOrCreateRsaKey("jwk.json");
         var rsaSecurityKey = new RsaSecurityKey(rsaKey)
         {
-            KeyId = jwtConfig.KeyId
+            KeyId = keyId
         };
         var creds = new SigningCredentials(rsaSecurityKey, SecurityAlgorithms.RsaSha256);
 
@@ -116,5 +117,72 @@ public class Program
         app.MapUserInfoEndpoint();
 
         app.Run();
+    }
+
+    private static (RSA Key, string KeyId) LoadOrCreateRsaKey(string filePath)
+    {
+        if (File.Exists(filePath))
+        {
+            try
+            {
+                var json = File.ReadAllText(filePath);
+                var jwk = JsonSerializer.Deserialize<JsonElement>(json);
+
+                var kid = jwk.GetProperty("kid").GetString()!;
+                var rsaParams = new RSAParameters
+                {
+                    Modulus = Base64UrlEncoder.DecodeBytes(jwk.GetProperty("n").GetString()!),
+                    Exponent = Base64UrlEncoder.DecodeBytes(jwk.GetProperty("e").GetString()!),
+                    D = Base64UrlEncoder.DecodeBytes(jwk.GetProperty("d").GetString()!),
+                    P = Base64UrlEncoder.DecodeBytes(jwk.GetProperty("p").GetString()!),
+                    Q = Base64UrlEncoder.DecodeBytes(jwk.GetProperty("q").GetString()!),
+                    DP = Base64UrlEncoder.DecodeBytes(jwk.GetProperty("dp").GetString()!),
+                    DQ = Base64UrlEncoder.DecodeBytes(jwk.GetProperty("dq").GetString()!),
+                    InverseQ = Base64UrlEncoder.DecodeBytes(jwk.GetProperty("qi").GetString()!)
+                };
+
+                var rsa = RSA.Create();
+                rsa.ImportParameters(rsaParams);
+                Console.WriteLine($"Loaded RSA signing key from {filePath} (kid: {kid})");
+                return (rsa, kid);
+            }
+            catch (Exception ex)
+            {
+                var ephemeralKid = Guid.NewGuid().ToString();
+                Console.Error.WriteLine($"Error reading {filePath}, using ephemeral key (kid: {ephemeralKid}): {ex.Message}");
+                return (RSA.Create(2048), ephemeralKid);
+            }
+        }
+
+        var newKey = RSA.Create(2048);
+        var newKid = Guid.NewGuid().ToString();
+
+        try
+        {
+            var p = newKey.ExportParameters(true);
+            var jwkObj = new
+            {
+                kty = "RSA",
+                kid = newKid,
+                n = Base64UrlEncoder.Encode(p.Modulus!),
+                e = Base64UrlEncoder.Encode(p.Exponent!),
+                d = Base64UrlEncoder.Encode(p.D!),
+                p = Base64UrlEncoder.Encode(p.P!),
+                q = Base64UrlEncoder.Encode(p.Q!),
+                dp = Base64UrlEncoder.Encode(p.DP!),
+                dq = Base64UrlEncoder.Encode(p.DQ!),
+                qi = Base64UrlEncoder.Encode(p.InverseQ!)
+            };
+
+            var jsonText = JsonSerializer.Serialize(jwkObj, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(filePath, jsonText);
+            Console.WriteLine($"Created new RSA signing key and saved to {filePath} (kid: {newKid})");
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Warning: could not write {filePath}, key is ephemeral: {ex.Message}");
+        }
+
+        return (newKey, newKid);
     }
 }

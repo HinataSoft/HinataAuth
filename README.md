@@ -27,7 +27,7 @@ HinataAuth is designed for:
 
 > **Note**: For production deployments, consider using established solutions like Keycloak, Auth0, or IdentityServer. HinataAuth prioritizes simplicity over enterprise features.
 
-> **Note**: JWT key (JWK) is generated fresh new at the app startup. That implies that tokens issued before a restart are no more valid.
+> **Note**: The RSA signing key is persisted to `jwk.json` in the working directory. On first run, a new key is generated and saved. On subsequent runs, the existing key is loaded so that tokens survive restarts. If the file is corrupt, an ephemeral key is used without overwriting the file.
 
 ## Quick Start
 
