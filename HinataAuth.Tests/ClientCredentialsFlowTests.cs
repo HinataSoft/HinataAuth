@@ -326,6 +326,31 @@ public class ClientCredentialsFlowTests
     }
 
     [Fact]
+    public async Task ClientCredentials_DoesNotReturnIdToken()
+    {
+        // Arrange
+        var requestContent = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            { "grant_type", "client_credentials" },
+            { "client_id", TestClientId },
+            { "client_secret", TestClientSecret },
+            { "scope", "auth" }
+        });
+
+        // Act
+        var response = await _client.PostAsync("/connect/token", requestContent);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var content = await response.Content.ReadAsStringAsync();
+        var tokenResponse = JsonSerializer.Deserialize<JsonElement>(content);
+
+        // id_token should NOT be present for client credentials flow
+        Assert.False(tokenResponse.TryGetProperty("id_token", out _));
+    }
+
+    [Fact]
     public async Task UnsupportedGrantType_ReturnsError()
     {
         // Arrange

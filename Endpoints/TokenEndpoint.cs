@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Web;
 using HinataAuth.Models;
 using HinataAuth.Services;
@@ -149,11 +150,21 @@ public static class TokenEndpoint
         };
         var refreshToken = refreshTokenStore.CreateToken(clientId, authCode.UserId, scopeString, refreshUserClaims);
 
+        // Generate id_token for identity flows (OIDC)
+        var idToken = GenerateIdToken(
+            authCode.UserId ?? clientId,
+            clientId,
+            authCode.UserClaims,
+            accessToken,
+            jwtConfig,
+            creds);
+
         Console.WriteLine("Issued a token: " + accessToken);
 
         return Results.Ok(new
         {
             access_token = accessToken,
+            id_token = idToken,
             token_type = "Bearer",
             expires_in = jwtConfig.ExpirationMinutes * 60,
             scope = scopeString,
@@ -240,6 +251,52 @@ public static class TokenEndpoint
         });
     }
 
+    private static string GenerateIdToken(
+        string subject,
+        string clientId,
+        Dictionary<string, string> userClaims,
+        string accessToken,
+        JwtConfig jwtConfig,
+        SigningCredentials creds)
+    {
+        var claims = new List<Claim>
+        {
+            new(JwtRegisteredClaimNames.Sub, subject),
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            new("at_hash", ComputeAtHash(accessToken))
+        };
+
+        // Add user claims (name, email, etc.)
+        foreach (var claim in userClaims)
+        {
+            // Skip internal claims that don't belong in id_token
+            if (claim.Key == "sub_type")
+                continue;
+            claims.Add(new Claim(claim.Key, claim.Value));
+        }
+
+        var tokenDescriptor = new SecurityTokenDescriptor
+        {
+            Subject = new ClaimsIdentity(claims),
+            Expires = DateTime.UtcNow.AddMinutes(jwtConfig.ExpirationMinutes),
+            Issuer = jwtConfig.Issuer,
+            Audience = clientId, // id_token audience is the client_id per OIDC spec
+            SigningCredentials = creds
+        };
+
+        var tokenHandler = new JwtSecurityTokenHandler();
+        var token = tokenHandler.CreateToken(tokenDescriptor);
+        return tokenHandler.WriteToken(token);
+    }
+
+    private static string ComputeAtHash(string accessToken)
+    {
+        // at_hash = base64url(left half of SHA-256(access_token)) per OIDC Core §3.1.3.6
+        var hash = SHA256.HashData(System.Text.Encoding.ASCII.GetBytes(accessToken));
+        var leftHalf = hash[..(hash.Length / 2)];
+        return Base64UrlEncoder.Encode(leftHalf);
+    }
+
     private static IResult HandleRefreshTokenGrant(IRefreshTokenStore refreshTokenStore, JwtConfig jwtConfig, SigningCredentials creds, System.Collections.Specialized.NameValueCollection formData, string clientId, string clientSecret)
     {
         // Validate client credentials
@@ -315,6 +372,22 @@ public static class TokenEndpoint
 
         // Issue a new refresh token (refresh token rotation for security)
         var newRefreshToken = refreshTokenStore.CreateToken(clientId, refreshToken.UserId, scopeString, refreshToken.UserClaims);
+
+        // Generate id_token for identity flows (originated from authorization code)
+        var isIdentityFlow = refreshToken.UserClaims.TryGetValue("sub_type", out var subType) && subType == "identity";
+        if (isIdentityFlow)
+        {
+            var idToken = GenerateIdToken(subject, clientId, refreshToken.UserClaims, accessToken, jwtConfig, creds);
+            return Results.Ok(new
+            {
+                access_token = accessToken,
+                id_token = idToken,
+                token_type = "Bearer",
+                expires_in = jwtConfig.ExpirationMinutes * 60,
+                scope = scopeString,
+                refresh_token = newRefreshToken.Token
+            });
+        }
 
         return Results.Ok(new
         {

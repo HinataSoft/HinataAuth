@@ -682,6 +682,144 @@ public class AuthorizationCodeFlowTests : IClassFixture<CustomWebApplicationFact
 
     #endregion
 
+    #region ID Token Tests
+
+    [Fact]
+    public async Task Token_AuthorizationCode_ValidCodeExchange_ReturnsIdToken()
+    {
+        // Step 1: Get authorization code
+        var code = await GetAuthorizationCodeWithPostAsync();
+
+        // Step 2: Exchange code for token
+        var tokenRequest = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            { "grant_type", "authorization_code" },
+            { "code", code },
+            { "redirect_uri", TestRedirectUri },
+            { "client_id", TestClientId },
+            { "client_secret", TestClientSecret }
+        });
+
+        var tokenResponse = await _client.PostAsync("/connect/token", tokenRequest);
+        Assert.Equal(HttpStatusCode.OK, tokenResponse.StatusCode);
+
+        var content = await tokenResponse.Content.ReadAsStringAsync();
+        var tokenResult = JsonSerializer.Deserialize<JsonElement>(content);
+
+        // Assert id_token is present
+        Assert.True(tokenResult.TryGetProperty("id_token", out var idTokenElement));
+        var idTokenString = idTokenElement.GetString();
+        Assert.False(string.IsNullOrEmpty(idTokenString));
+
+        // Decode and verify id_token claims
+        var tokenHandler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
+        var idToken = tokenHandler.ReadJwtToken(idTokenString);
+
+        // aud should be client_id, not API audience
+        Assert.Contains(idToken.Audiences, a => a == TestClientId);
+        Assert.DoesNotContain(idToken.Audiences, a => a == "HinataAuth");
+
+        // sub should be the user
+        Assert.Equal(TestUsername, idToken.Subject);
+
+        // at_hash should be present
+        Assert.Contains(idToken.Claims, c => c.Type == "at_hash");
+        Assert.False(string.IsNullOrEmpty(idToken.Claims.First(c => c.Type == "at_hash").Value));
+    }
+
+    [Fact]
+    public async Task Token_AuthorizationCode_IdToken_ContainsUserClaims()
+    {
+        // Step 1: Get authorization code with profile+email scopes
+        var authorizeContent = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            { "response_type", "code" },
+            { "client_id", TestClientId },
+            { "redirect_uri", TestRedirectUri },
+            { "scope", "auth profile email" },
+            { "consent", "approved" },
+            { "username", TestUsername },
+            { "password", TestPassword }
+        });
+
+        var authorizeResponse = await _client.PostAsync("/connect/authorize", authorizeContent);
+        var location = authorizeResponse.Headers.Location?.ToString()!;
+        var code = ExtractCodeFromRedirect(location);
+
+        // Step 2: Exchange code for token
+        var tokenRequest = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            { "grant_type", "authorization_code" },
+            { "code", code },
+            { "redirect_uri", TestRedirectUri },
+            { "client_id", TestClientId },
+            { "client_secret", TestClientSecret }
+        });
+
+        var tokenResponse = await _client.PostAsync("/connect/token", tokenRequest);
+        var content = await tokenResponse.Content.ReadAsStringAsync();
+        var tokenResult = JsonSerializer.Deserialize<JsonElement>(content);
+
+        var idTokenString = tokenResult.GetProperty("id_token").GetString()!;
+        var tokenHandler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
+        var idToken = tokenHandler.ReadJwtToken(idTokenString);
+
+        // Assert user claims are in id_token
+        Assert.Contains(idToken.Claims, c => c.Type == "name" && c.Value == "Test User");
+        Assert.Contains(idToken.Claims, c => c.Type == "email" && c.Value == "test@example.com");
+    }
+
+    [Fact]
+    public async Task Token_RefreshToken_FromAuthCode_ReturnsIdToken()
+    {
+        // Step 1: Get authorization code
+        var code = await GetAuthorizationCodeWithPostAsync();
+
+        // Step 2: Exchange code for tokens
+        var tokenRequest = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            { "grant_type", "authorization_code" },
+            { "code", code },
+            { "redirect_uri", TestRedirectUri },
+            { "client_id", TestClientId },
+            { "client_secret", TestClientSecret }
+        });
+
+        var tokenResponse = await _client.PostAsync("/connect/token", tokenRequest);
+        var content = await tokenResponse.Content.ReadAsStringAsync();
+        var tokenResult = JsonSerializer.Deserialize<JsonElement>(content);
+
+        var refreshToken = tokenResult.GetProperty("refresh_token").GetString()!;
+
+        // Step 3: Use refresh token
+        var refreshRequest = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            { "grant_type", "refresh_token" },
+            { "refresh_token", refreshToken },
+            { "client_id", TestClientId },
+            { "client_secret", TestClientSecret }
+        });
+
+        var refreshResponse = await _client.PostAsync("/connect/token", refreshRequest);
+        Assert.Equal(HttpStatusCode.OK, refreshResponse.StatusCode);
+
+        var refreshContent = await refreshResponse.Content.ReadAsStringAsync();
+        var refreshResult = JsonSerializer.Deserialize<JsonElement>(refreshContent);
+
+        // Assert id_token is present in refresh response (identity flow)
+        Assert.True(refreshResult.TryGetProperty("id_token", out var idTokenElement));
+        var idTokenString = idTokenElement.GetString();
+        Assert.False(string.IsNullOrEmpty(idTokenString));
+
+        // Verify it's a valid JWT with correct audience
+        var tokenHandler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
+        var idToken = tokenHandler.ReadJwtToken(idTokenString);
+        Assert.Contains(idToken.Audiences, a => a == TestClientId);
+        Assert.Equal(TestUsername, idToken.Subject);
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private static string ExtractCodeFromRedirect(string location)

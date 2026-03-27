@@ -15,7 +15,8 @@ HinataAuth implements three OAuth 2.0 grant types:
 It also provides:
 - OIDC Discovery endpoint (`/.well-known/openid-configuration`)
 - JSON Web Key Set endpoint (`/.well-known/jwks`)
-- JWT access tokens signed with RSA-2048
+- UserInfo endpoint (`/connect/userinfo`)
+- JWT access tokens and `id_token`s signed with RSA-2048
 
 ## Intended Use
 
@@ -145,6 +146,16 @@ Access tokens include a `sub_type` claim to distinguish the authentication metho
 | Client Credentials | `client` | Machine-to-machine token |
 | Refresh Token | *(copied)* | Preserves the original `sub_type` |
 
+### ID Token
+
+An OIDC `id_token` is returned alongside the `access_token` for identity flows (authorization code grant and refresh token grant when the original was from authorization code). It is **not** issued for client credentials flow.
+
+The `id_token` differs from the `access_token`:
+- **Audience** (`aud`) is set to the `client_id` (not the API audience)
+- Contains user identity claims (`name`, `email`, etc.)
+- Contains `at_hash` (access token hash per OIDC Core §3.1.3.6)
+- Does not contain `scope` or `client_id` claims
+
 ## Playground
 
 Use `test.html` to test authorization code flow or client credentials flow.
@@ -157,6 +168,21 @@ dotnet test
 
 # Run specific test class
 dotnet test --filter "FullyQualifiedName~AuthorizationCodeFlowTests"
+```
+
+## Example: Authorization Code Token Response
+
+After exchanging an authorization code at `/connect/token`:
+
+```json
+{
+  "access_token": "eyJ...",
+  "id_token": "eyJ...",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "scope": "auth profile email",
+  "refresh_token": "..."
+}
 ```
 
 ## Example: Client Credentials Flow
