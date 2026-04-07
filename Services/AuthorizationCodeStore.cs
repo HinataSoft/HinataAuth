@@ -12,11 +12,13 @@ public class AuthorizationCode
     public Dictionary<string, string> UserClaims { get; set; } = new();
     public DateTime ExpiresAt { get; set; }
     public bool Used { get; set; }
+    public string? CodeChallenge { get; set; }
+    public string? CodeChallengeMethod { get; set; }
 }
 
 public interface IAuthorizationCodeStore
 {
-    AuthorizationCode CreateCode(string clientId, string redirectUri, string scope, string? userId, Dictionary<string, string>? userClaims = null);
+    AuthorizationCode CreateCode(string clientId, string redirectUri, string scope, string? userId, Dictionary<string, string>? userClaims = null, string? codeChallenge = null, string? codeChallengeMethod = null);
     AuthorizationCode? ConsumeCode(string code, string clientId, string redirectUri);
     bool ValidateClient(string clientId, string? clientSecret = null);
     string? GetScopes(string clientId);
@@ -34,7 +36,7 @@ public class AuthorizationCodeStore : IAuthorizationCodeStore
         _config = config;
     }
 
-    public AuthorizationCode CreateCode(string clientId, string redirectUri, string scope, string? userId, Dictionary<string, string>? userClaims = null)
+    public AuthorizationCode CreateCode(string clientId, string redirectUri, string scope, string? userId, Dictionary<string, string>? userClaims = null, string? codeChallenge = null, string? codeChallengeMethod = null)
     {
         var code = new AuthorizationCode
         {
@@ -45,7 +47,9 @@ public class AuthorizationCodeStore : IAuthorizationCodeStore
             UserId = userId,
             UserClaims = userClaims ?? new Dictionary<string, string>(),
             ExpiresAt = DateTime.UtcNow.AddMinutes(_config.CodeExpirationMinutes),
-            Used = false
+            Used = false,
+            CodeChallenge = codeChallenge,
+            CodeChallengeMethod = codeChallengeMethod
         };
 
         lock (_lock)

@@ -20,6 +20,8 @@ public static class AuthorizationEndpoint
         var redirectUri = query["redirect_uri"].ToString();
         var scope = query["scope"].ToString();
         var state = query["state"].ToString();
+        var codeChallenge = query["code_challenge"].ToString();
+        var codeChallengeMethod = query["code_challenge_method"].ToString();
 
         // Validate required parameters
         if (string.IsNullOrEmpty(responseType) || string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(redirectUri))
@@ -83,10 +85,40 @@ public static class AuthorizationEndpoint
             }
         }
 
+        // Validate PKCE parameters
+        if (string.IsNullOrEmpty(codeChallenge) && !string.IsNullOrEmpty(codeChallengeMethod))
+        {
+            return Results.BadRequest(new
+            {
+                error = "invalid_request",
+                error_description = "code_challenge_method requires code_challenge"
+            });
+        }
+
+        // Default to "plain" per RFC 7636 §4.3
+        if (!string.IsNullOrEmpty(codeChallenge) && string.IsNullOrEmpty(codeChallengeMethod))
+        {
+            codeChallengeMethod = "plain";
+        }
+
+        if (!string.IsNullOrEmpty(codeChallengeMethod)
+            && codeChallengeMethod != "S256" && codeChallengeMethod != "plain")
+        {
+            return Results.BadRequest(new
+            {
+                error = "invalid_request",
+                error_description = "Unsupported code_challenge_method. Supported: S256, plain"
+            });
+        }
+
         // GET requests should always redirect to the authorization UI
         // Consent decisions must be made via POST to prevent URL-based bypass
         var pathBase = configuration["PathBase"] ?? "";
         var authorizeUrl = $"{pathBase}/authorize.html?client_id={HttpUtility.UrlEncode(clientId)}&redirect_uri={HttpUtility.UrlEncode(redirectUri)}&scope={HttpUtility.UrlEncode(string.Join(" ", requestedScopes))}&state={HttpUtility.UrlEncode(state ?? "")}&response_type={HttpUtility.UrlEncode(responseType)}";
+        if (!string.IsNullOrEmpty(codeChallenge))
+        {
+            authorizeUrl += $"&code_challenge={HttpUtility.UrlEncode(codeChallenge)}&code_challenge_method={HttpUtility.UrlEncode(codeChallengeMethod)}";
+        }
         return Results.Redirect(authorizeUrl);
     }
 
@@ -102,6 +134,8 @@ public static class AuthorizationEndpoint
         var consent = form["consent"].ToString();
         var username = form["username"].ToString();
         var password = form["password"].ToString();
+        var codeChallenge = form["code_challenge"].ToString();
+        var codeChallengeMethod = form["code_challenge_method"].ToString();
 
         // Validate required parameters
         if (string.IsNullOrEmpty(responseType) || string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(redirectUri))
@@ -176,6 +210,32 @@ public static class AuthorizationEndpoint
             requestedScopes = requestedScopes.Where(s => allowedScopes.Contains(s)).ToList();
         }
 
+        // Validate PKCE parameters
+        if (string.IsNullOrEmpty(codeChallenge) && !string.IsNullOrEmpty(codeChallengeMethod))
+        {
+            return Results.BadRequest(new
+            {
+                error = "invalid_request",
+                error_description = "code_challenge_method requires code_challenge"
+            });
+        }
+
+        // Default to "plain" per RFC 7636 §4.3
+        if (!string.IsNullOrEmpty(codeChallenge) && string.IsNullOrEmpty(codeChallengeMethod))
+        {
+            codeChallengeMethod = "plain";
+        }
+
+        if (!string.IsNullOrEmpty(codeChallengeMethod)
+            && codeChallengeMethod != "S256" && codeChallengeMethod != "plain")
+        {
+            return Results.BadRequest(new
+            {
+                error = "invalid_request",
+                error_description = "Unsupported code_challenge_method. Supported: S256, plain"
+            });
+        }
+
         // Handle denied consent
         if (consent != "approved")
         {
@@ -199,7 +259,10 @@ public static class AuthorizationEndpoint
         var userClaims = credentialsStore.GetUserClaims(username);
 
         // Create authorization code with user claims
-        var authCode = codeStore.CreateCode(clientId, redirectUri, string.Join(" ", requestedScopes), userId, userClaims);
+        var authCode = codeStore.CreateCode(
+            clientId, redirectUri, string.Join(" ", requestedScopes), userId, userClaims,
+            string.IsNullOrEmpty(codeChallenge) ? null : codeChallenge,
+            string.IsNullOrEmpty(codeChallengeMethod) ? null : codeChallengeMethod);
 
         // Build redirect URI with authorization code
         var redirectUriBuilder = new UriBuilder(redirectUri);

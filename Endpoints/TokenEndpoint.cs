@@ -62,6 +62,7 @@ public static class TokenEndpoint
     {
         var code = formData["code"] ?? "";
         var redirectUri = formData["redirect_uri"] ?? "";
+        var codeVerifier = formData["code_verifier"] ?? "";
 
         // Validate required parameters
         if (string.IsNullOrEmpty(code) || string.IsNullOrEmpty(redirectUri))
@@ -102,6 +103,45 @@ public static class TokenEndpoint
                 error = "invalid_client",
                 error_description = "Invalid client credentials"
             });
+        }
+
+        // PKCE verification
+        if (!string.IsNullOrEmpty(authCode.CodeChallenge))
+        {
+            if (string.IsNullOrEmpty(codeVerifier))
+            {
+                return Results.BadRequest(new
+                {
+                    error = "invalid_grant",
+                    error_description = "code_verifier is required when code_challenge was provided"
+                });
+            }
+
+            bool pkceValid;
+            if (authCode.CodeChallengeMethod == "S256")
+            {
+                var hash = SHA256.HashData(System.Text.Encoding.ASCII.GetBytes(codeVerifier));
+                var computed = Base64UrlEncoder.Encode(hash);
+                pkceValid = CryptographicOperations.FixedTimeEquals(
+                    System.Text.Encoding.ASCII.GetBytes(computed),
+                    System.Text.Encoding.ASCII.GetBytes(authCode.CodeChallenge));
+            }
+            else
+            {
+                // "plain" method (also the default per RFC 7636 §4.3)
+                pkceValid = CryptographicOperations.FixedTimeEquals(
+                    System.Text.Encoding.ASCII.GetBytes(codeVerifier),
+                    System.Text.Encoding.ASCII.GetBytes(authCode.CodeChallenge));
+            }
+
+            if (!pkceValid)
+            {
+                return Results.BadRequest(new
+                {
+                    error = "invalid_grant",
+                    error_description = "PKCE verification failed"
+                });
+            }
         }
 
         // Get scopes from the authorization code

@@ -820,6 +820,309 @@ public class AuthorizationCodeFlowTests : IClassFixture<CustomWebApplicationFact
 
     #endregion
 
+    #region PKCE Tests
+
+    [Fact]
+    public async Task AuthCodeFlow_Pkce_S256_Success()
+    {
+        var codeVerifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+        using var sha256 = System.Security.Cryptography.SHA256.Create();
+        var challengeBytes = sha256.ComputeHash(System.Text.Encoding.ASCII.GetBytes(codeVerifier));
+        var codeChallenge = Microsoft.IdentityModel.Tokens.Base64UrlEncoder.Encode(challengeBytes);
+
+        var authorizeContent = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["response_type"] = "code",
+            ["client_id"] = TestClientId,
+            ["redirect_uri"] = TestRedirectUri,
+            ["scope"] = TestScope,
+            ["consent"] = "approved",
+            ["username"] = TestUsername,
+            ["password"] = TestPassword,
+            ["code_challenge"] = codeChallenge,
+            ["code_challenge_method"] = "S256"
+        });
+
+        var authorizeResponse = await _client.PostAsync("/connect/authorize", authorizeContent);
+        Assert.Equal(HttpStatusCode.Redirect, authorizeResponse.StatusCode);
+
+        var location = authorizeResponse.Headers.Location!.ToString();
+        var queryParams = System.Web.HttpUtility.ParseQueryString(new Uri(location).Query);
+        var code = queryParams["code"];
+        Assert.False(string.IsNullOrEmpty(code));
+
+        var tokenContent = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["grant_type"] = "authorization_code",
+            ["code"] = code!,
+            ["redirect_uri"] = TestRedirectUri,
+            ["client_id"] = TestClientId,
+            ["client_secret"] = TestClientSecret,
+            ["code_verifier"] = codeVerifier
+        });
+
+        var tokenResponse = await _client.PostAsync("/connect/token", tokenContent);
+        Assert.Equal(HttpStatusCode.OK, tokenResponse.StatusCode);
+
+        var tokenJson = JsonSerializer.Deserialize<JsonElement>(await tokenResponse.Content.ReadAsStringAsync());
+        Assert.True(tokenJson.TryGetProperty("access_token", out _));
+    }
+
+    [Fact]
+    public async Task AuthCodeFlow_Pkce_Plain_Success()
+    {
+        var codeVerifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+        var codeChallenge = codeVerifier;
+
+        var authorizeContent = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["response_type"] = "code",
+            ["client_id"] = TestClientId,
+            ["redirect_uri"] = TestRedirectUri,
+            ["scope"] = TestScope,
+            ["consent"] = "approved",
+            ["username"] = TestUsername,
+            ["password"] = TestPassword,
+            ["code_challenge"] = codeChallenge,
+            ["code_challenge_method"] = "plain"
+        });
+
+        var authorizeResponse = await _client.PostAsync("/connect/authorize", authorizeContent);
+        Assert.Equal(HttpStatusCode.Redirect, authorizeResponse.StatusCode);
+
+        var location = authorizeResponse.Headers.Location!.ToString();
+        var queryParams = System.Web.HttpUtility.ParseQueryString(new Uri(location).Query);
+        var code = queryParams["code"];
+        Assert.False(string.IsNullOrEmpty(code));
+
+        var tokenContent = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["grant_type"] = "authorization_code",
+            ["code"] = code!,
+            ["redirect_uri"] = TestRedirectUri,
+            ["client_id"] = TestClientId,
+            ["client_secret"] = TestClientSecret,
+            ["code_verifier"] = codeVerifier
+        });
+
+        var tokenResponse = await _client.PostAsync("/connect/token", tokenContent);
+        Assert.Equal(HttpStatusCode.OK, tokenResponse.StatusCode);
+
+        var tokenJson = JsonSerializer.Deserialize<JsonElement>(await tokenResponse.Content.ReadAsStringAsync());
+        Assert.True(tokenJson.TryGetProperty("access_token", out _));
+    }
+
+    [Fact]
+    public async Task AuthCodeFlow_Pkce_MissingVerifier_ReturnsInvalidGrant()
+    {
+        var codeVerifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+        var codeChallenge = codeVerifier;
+
+        var authorizeContent = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["response_type"] = "code",
+            ["client_id"] = TestClientId,
+            ["redirect_uri"] = TestRedirectUri,
+            ["scope"] = TestScope,
+            ["consent"] = "approved",
+            ["username"] = TestUsername,
+            ["password"] = TestPassword,
+            ["code_challenge"] = codeChallenge,
+            ["code_challenge_method"] = "plain"
+        });
+
+        var authorizeResponse = await _client.PostAsync("/connect/authorize", authorizeContent);
+        var location = authorizeResponse.Headers.Location!.ToString();
+        var queryParams = System.Web.HttpUtility.ParseQueryString(new Uri(location).Query);
+        var code = queryParams["code"]!;
+
+        var tokenContent = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["grant_type"] = "authorization_code",
+            ["code"] = code,
+            ["redirect_uri"] = TestRedirectUri,
+            ["client_id"] = TestClientId,
+            ["client_secret"] = TestClientSecret
+        });
+
+        var tokenResponse = await _client.PostAsync("/connect/token", tokenContent);
+        Assert.Equal(HttpStatusCode.BadRequest, tokenResponse.StatusCode);
+
+        var errorJson = JsonSerializer.Deserialize<JsonElement>(await tokenResponse.Content.ReadAsStringAsync());
+        Assert.Equal("invalid_grant", errorJson.GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task AuthCodeFlow_Pkce_WrongVerifier_ReturnsInvalidGrant()
+    {
+        var codeVerifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+        using var sha256 = System.Security.Cryptography.SHA256.Create();
+        var challengeBytes = sha256.ComputeHash(System.Text.Encoding.ASCII.GetBytes(codeVerifier));
+        var codeChallenge = Microsoft.IdentityModel.Tokens.Base64UrlEncoder.Encode(challengeBytes);
+
+        var authorizeContent = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["response_type"] = "code",
+            ["client_id"] = TestClientId,
+            ["redirect_uri"] = TestRedirectUri,
+            ["scope"] = TestScope,
+            ["consent"] = "approved",
+            ["username"] = TestUsername,
+            ["password"] = TestPassword,
+            ["code_challenge"] = codeChallenge,
+            ["code_challenge_method"] = "S256"
+        });
+
+        var authorizeResponse = await _client.PostAsync("/connect/authorize", authorizeContent);
+        var location = authorizeResponse.Headers.Location!.ToString();
+        var queryParams = System.Web.HttpUtility.ParseQueryString(new Uri(location).Query);
+        var code = queryParams["code"]!;
+
+        var tokenContent = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["grant_type"] = "authorization_code",
+            ["code"] = code,
+            ["redirect_uri"] = TestRedirectUri,
+            ["client_id"] = TestClientId,
+            ["client_secret"] = TestClientSecret,
+            ["code_verifier"] = "totally-wrong-verifier-value-here-padding"
+        });
+
+        var tokenResponse = await _client.PostAsync("/connect/token", tokenContent);
+        Assert.Equal(HttpStatusCode.BadRequest, tokenResponse.StatusCode);
+
+        var errorJson = JsonSerializer.Deserialize<JsonElement>(await tokenResponse.Content.ReadAsStringAsync());
+        Assert.Equal("invalid_grant", errorJson.GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task AuthCodeFlow_Pkce_InvalidMethod_ReturnsInvalidRequest()
+    {
+        var authorizeContent = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["response_type"] = "code",
+            ["client_id"] = TestClientId,
+            ["redirect_uri"] = TestRedirectUri,
+            ["scope"] = TestScope,
+            ["consent"] = "approved",
+            ["username"] = TestUsername,
+            ["password"] = TestPassword,
+            ["code_challenge"] = "some-challenge-value",
+            ["code_challenge_method"] = "S512"
+        });
+
+        var authorizeResponse = await _client.PostAsync("/connect/authorize", authorizeContent);
+        Assert.Equal(HttpStatusCode.BadRequest, authorizeResponse.StatusCode);
+
+        var errorJson = JsonSerializer.Deserialize<JsonElement>(await authorizeResponse.Content.ReadAsStringAsync());
+        Assert.Equal("invalid_request", errorJson.GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task AuthCodeFlow_Pkce_MethodWithoutChallenge_ReturnsInvalidRequest()
+    {
+        var authorizeContent = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["response_type"] = "code",
+            ["client_id"] = TestClientId,
+            ["redirect_uri"] = TestRedirectUri,
+            ["scope"] = TestScope,
+            ["consent"] = "approved",
+            ["username"] = TestUsername,
+            ["password"] = TestPassword,
+            ["code_challenge_method"] = "S256"
+        });
+
+        var authorizeResponse = await _client.PostAsync("/connect/authorize", authorizeContent);
+        Assert.Equal(HttpStatusCode.BadRequest, authorizeResponse.StatusCode);
+
+        var errorJson = JsonSerializer.Deserialize<JsonElement>(await authorizeResponse.Content.ReadAsStringAsync());
+        Assert.Equal("invalid_request", errorJson.GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task AuthCodeFlow_NoPkce_StillWorks()
+    {
+        var authorizeContent = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["response_type"] = "code",
+            ["client_id"] = TestClientId,
+            ["redirect_uri"] = TestRedirectUri,
+            ["scope"] = TestScope,
+            ["consent"] = "approved",
+            ["username"] = TestUsername,
+            ["password"] = TestPassword
+        });
+
+        var authorizeResponse = await _client.PostAsync("/connect/authorize", authorizeContent);
+        Assert.Equal(HttpStatusCode.Redirect, authorizeResponse.StatusCode);
+
+        var location = authorizeResponse.Headers.Location!.ToString();
+        var queryParams = System.Web.HttpUtility.ParseQueryString(new Uri(location).Query);
+        var code = queryParams["code"];
+        Assert.False(string.IsNullOrEmpty(code));
+
+        var tokenContent = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["grant_type"] = "authorization_code",
+            ["code"] = code!,
+            ["redirect_uri"] = TestRedirectUri,
+            ["client_id"] = TestClientId,
+            ["client_secret"] = TestClientSecret
+        });
+
+        var tokenResponse = await _client.PostAsync("/connect/token", tokenContent);
+        Assert.Equal(HttpStatusCode.OK, tokenResponse.StatusCode);
+
+        var tokenJson = JsonSerializer.Deserialize<JsonElement>(await tokenResponse.Content.ReadAsStringAsync());
+        Assert.True(tokenJson.TryGetProperty("access_token", out _));
+    }
+
+    [Fact]
+    public async Task AuthCodeFlow_Pkce_DefaultPlainMethod_Success()
+    {
+        // Send code_challenge WITHOUT code_challenge_method — should default to "plain"
+        var codeVerifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+
+        var authorizeContent = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["response_type"] = "code",
+            ["client_id"] = TestClientId,
+            ["redirect_uri"] = TestRedirectUri,
+            ["scope"] = TestScope,
+            ["consent"] = "approved",
+            ["username"] = TestUsername,
+            ["password"] = TestPassword,
+            ["code_challenge"] = codeVerifier // plain: challenge == verifier
+        });
+
+        var authorizeResponse = await _client.PostAsync("/connect/authorize", authorizeContent);
+        Assert.Equal(HttpStatusCode.Redirect, authorizeResponse.StatusCode);
+
+        var location = authorizeResponse.Headers.Location!.ToString();
+        var queryParams = System.Web.HttpUtility.ParseQueryString(new Uri(location).Query);
+        var code = queryParams["code"];
+        Assert.False(string.IsNullOrEmpty(code));
+
+        var tokenContent = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["grant_type"] = "authorization_code",
+            ["code"] = code!,
+            ["redirect_uri"] = TestRedirectUri,
+            ["client_id"] = TestClientId,
+            ["client_secret"] = TestClientSecret,
+            ["code_verifier"] = codeVerifier
+        });
+
+        var tokenResponse = await _client.PostAsync("/connect/token", tokenContent);
+        Assert.Equal(HttpStatusCode.OK, tokenResponse.StatusCode);
+
+        var tokenJson = JsonSerializer.Deserialize<JsonElement>(await tokenResponse.Content.ReadAsStringAsync());
+        Assert.True(tokenJson.TryGetProperty("access_token", out _));
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private static string ExtractCodeFromRedirect(string location)

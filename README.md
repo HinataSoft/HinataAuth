@@ -17,6 +17,7 @@ It also provides:
 - JSON Web Key Set endpoint (`/.well-known/jwks`)
 - UserInfo endpoint (`/connect/userinfo`)
 - JWT access tokens and `id_token`s signed with RSA-2048
+- PKCE support (RFC 7636) with `S256` and `plain` methods
 
 ## Intended Use
 
