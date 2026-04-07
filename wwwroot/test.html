@@ -409,6 +409,7 @@
 
                 if (response.ok) {
                     resultDiv.className = 'result success';
+                    resultDiv.style.display = 'block';
                     resultDiv.innerHTML = `
                         <strong>Success!</strong><br>
                         Access Token:<br>
@@ -419,10 +420,12 @@
                     `;
                 } else {
                     resultDiv.className = 'result error';
+                    resultDiv.style.display = 'block';
                     resultDiv.innerHTML = `<strong>Error:</strong> ${data.error_description || data.error || 'Unknown error'}`;
                 }
             } catch (error) {
                 resultDiv.className = 'result error';
+                resultDiv.style.display = 'block';
                 resultDiv.innerHTML = `<strong>Error:</strong> ${error.message}`;
             }
         }
