@@ -8,6 +8,7 @@ public interface IRefreshTokenStore
     RefreshToken? ConsumeToken(string token, string clientId);
     bool RevokeToken(string token, string clientId);
     RefreshToken? GetToken(string token);
+    void RevokeTokensByClientId(string clientId);
 }
 
 public class RefreshTokenStore : IRefreshTokenStore
@@ -116,6 +117,22 @@ public class RefreshTokenStore : IRefreshTokenStore
         lock (_lock)
         {
             return _tokens.TryGetValue(token, out var refreshToken) ? refreshToken : null;
+        }
+    }
+
+    public void RevokeTokensByClientId(string clientId)
+    {
+        lock (_lock)
+        {
+            var tokensToRemove = _tokens
+                .Where(kvp => kvp.Value.ClientId == clientId)
+                .Select(kvp => kvp.Key)
+                .ToList();
+
+            foreach (var token in tokensToRemove)
+            {
+                _tokens.Remove(token);
+            }
         }
     }
 

@@ -24,6 +24,8 @@ public class Program
         var jwtConfig = builder.Configuration.GetSection("Jwt").Get<JwtConfig>()
             ?? new JwtConfig();
         var refreshTokenConfig = jwtConfig.RefreshToken ?? new RefreshTokenConfig();
+        var dcrConfig = builder.Configuration.GetSection("DynamicClientRegistration").Get<DynamicClientRegistrationConfig>()
+            ?? new DynamicClientRegistrationConfig();
 
         // Load or generate RSA key for JWT signing and JWKS
         var (rsaKey, keyId) = LoadOrCreateRsaKey(Path.Combine("run", "jwk.json"));
@@ -38,6 +40,8 @@ public class Program
         builder.Services.AddSingleton(authorizationCodeConfig);
         builder.Services.AddSingleton(jwtConfig);
         builder.Services.AddSingleton(refreshTokenConfig);
+        builder.Services.AddSingleton(dcrConfig);
+        builder.Services.AddSingleton<IClientStore, ClientStore>();
         builder.Services.AddSingleton<IClientCredentialsStore, ClientCredentialsStore>();
         builder.Services.AddSingleton<IAuthorizationCodeStore, AuthorizationCodeStore>();
         builder.Services.AddSingleton<IRefreshTokenStore, RefreshTokenStore>();
@@ -115,6 +119,7 @@ public class Program
         app.MapDiscoveryEndpoint();
         app.MapHealthEndpoint();
         app.MapUserInfoEndpoint();
+        app.MapRegistrationEndpoint();
 
         app.Run();
     }

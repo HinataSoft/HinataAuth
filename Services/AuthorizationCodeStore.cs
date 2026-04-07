@@ -28,12 +28,14 @@ public interface IAuthorizationCodeStore
 public class AuthorizationCodeStore : IAuthorizationCodeStore
 {
     private readonly AuthorizationCodeConfig _config;
+    private readonly IClientStore _clientStore;
     private readonly Dictionary<string, AuthorizationCode> _codes = new();
     private readonly object _lock = new();
 
-    public AuthorizationCodeStore(AuthorizationCodeConfig config)
+    public AuthorizationCodeStore(AuthorizationCodeConfig config, IClientStore clientStore)
     {
         _config = config;
+        _clientStore = clientStore;
     }
 
     public AuthorizationCode CreateCode(string clientId, string redirectUri, string scope, string? userId, Dictionary<string, string>? userClaims = null, string? codeChallenge = null, string? codeChallengeMethod = null)
@@ -100,42 +102,23 @@ public class AuthorizationCodeStore : IAuthorizationCodeStore
 
     public bool ValidateClient(string clientId, string? clientSecret = null)
     {
-        var client = _config.Clients.FirstOrDefault(c => c.ClientId == clientId);
-        if (client == null)
-        {
-            return false;
-        }
+        // When no secret is provided (e.g. authorize endpoint checking existence),
+        // just verify the client is registered rather than validating credentials.
+        if (clientSecret == null)
+            return _clientStore.GetClient(clientId) != null;
 
-        // If clientSecret is provided, validate it
-        if (!string.IsNullOrEmpty(clientSecret))
-        {
-            return client.ClientSecret == clientSecret;
-        }
-
-        return true;
+        return _clientStore.ValidateClient(clientId, clientSecret);
     }
 
     public string? GetScopes(string clientId)
     {
-        var client = _config.Clients.FirstOrDefault(c => c.ClientId == clientId);
-        return client?.Scopes;
+        var scopes = _clientStore.GetScopes(clientId);
+        return scopes == null ? null : string.Join(" ", scopes);
     }
 
     public bool ValidateRedirectUri(string clientId, string redirectUri)
     {
-        var client = _config.Clients.FirstOrDefault(c => c.ClientId == clientId);
-        if (client == null)
-        {
-            return false;
-        }
-
-        // If no redirect URIs configured, use default
-        if (client.RedirectUris.Count == 0 && !string.IsNullOrEmpty(_config.DefaultRedirectUri))
-        {
-            return redirectUri == _config.DefaultRedirectUri;
-        }
-
-        return client.RedirectUris.Contains(redirectUri);
+        return _clientStore.ValidateRedirectUri(clientId, redirectUri);
     }
 
     private static string GenerateCode()

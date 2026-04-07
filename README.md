@@ -18,6 +18,7 @@ It also provides:
 - UserInfo endpoint (`/connect/userinfo`)
 - JWT access tokens and `id_token`s signed with RSA-2048
 - PKCE support (RFC 7636) with `S256` and `plain` methods
+- Dynamic Client Registration (RFC 7591) and Client Management (RFC 7592)
 
 ## Intended Use
 
@@ -111,6 +112,24 @@ This way, one can log in somewhere as a user and, at the same time, provide the 
 }
 ```
 
+### DynamicClientRegistration - Dynamic Client Registration (RFC 7591 + 7592)
+
+```json
+"DynamicClientRegistration": {
+  "enabled": true,
+  "allowConfidentialClients": false,
+  "allowedScopes": ["read", "write"],
+  "clientStorePath": "run/clients.json"
+}
+```
+
+- `enabled` — master switch for the `/connect/register` endpoint. When `false`, returns 404 and is omitted from discovery.
+- `allowConfidentialClients` — when `false` (default), only public clients (`token_endpoint_auth_method: "none"`) can register. Public clients must use PKCE. Set to `true` to allow clients to request a `client_secret`.
+- `allowedScopes` — scopes that dynamically registered clients may request. Registration is rejected if a scope is not in this list.
+- `clientStorePath` — file path for persisting dynamic clients. Secrets are stored as SHA-256 hashes. Uses atomic writes.
+
+Dynamic clients are limited to `authorization_code` and `refresh_token` grant types. Registered clients can be read, updated, or deleted via the management endpoint using the `registration_access_token` returned at registration.
+
 ### PathBase - Base path for redirects (optional)
 
 ```json
@@ -135,6 +154,8 @@ Leave empty for no prefix.
 | `GET /connect/userinfo` | UserInfo endpoint (requires valid JWT) |
 | `GET /.well-known/openid-configuration` | OIDC Discovery |
 | `GET /.well-known/jwks` | JSON Web Key Set |
+| `POST /connect/register` | Dynamic Client Registration (RFC 7591) |
+| `GET/PUT/DELETE /connect/register/{id}` | Client Management (RFC 7592) |
 | `GET /health` | Health check |
 
 ## Token Claims
@@ -213,10 +234,12 @@ HinataAuth/
 │   ├── AuthorizationEndpoint.cs
 │   ├── TokenEndpoint.cs
 │   ├── JwksEndpoint.cs
-│   └── DiscoveryEndpoint.cs
+│   ├── DiscoveryEndpoint.cs
+│   └── RegistrationEndpoint.cs
 ├── Services/           # Business logic
 │   ├── AuthorizationCodeStore.cs
 │   ├── ClientCredentialsStore.cs
+│   ├── ClientStore.cs
 │   └── RefreshTokenStore.cs
 ├── Models/             # Configuration classes
 └── Program.cs          # App entry point

@@ -34,7 +34,7 @@ public static class TokenEndpoint
             // Handle authorization_code grant type
             if (grantType == "authorization_code")
             {
-                var result = HandleAuthorizationCodeGrant(codeStore, refreshTokenStore, jwtConfigSvc, credsSvc, formData, clientId, clientSecret);
+                var result = HandleAuthorizationCodeGrant(context, codeStore, refreshTokenStore, jwtConfigSvc, credsSvc, formData, clientId, clientSecret);
                 return result;
             }
             // Handle client_credentials grant type
@@ -46,7 +46,7 @@ public static class TokenEndpoint
             // Handle refresh_token grant type
             else if (grantType == "refresh_token")
             {
-                var result = HandleRefreshTokenGrant(refreshTokenStore, jwtConfigSvc, credsSvc, formData, clientId, clientSecret);
+                var result = HandleRefreshTokenGrant(context, refreshTokenStore, jwtConfigSvc, credsSvc, formData, clientId, clientSecret);
                 return result;
             }
             
@@ -58,7 +58,7 @@ public static class TokenEndpoint
         });
     }
 
-    private static IResult HandleAuthorizationCodeGrant(IAuthorizationCodeStore codeStore, IRefreshTokenStore refreshTokenStore, JwtConfig jwtConfig, SigningCredentials creds, System.Collections.Specialized.NameValueCollection formData, string clientId, string clientSecret)
+    private static IResult HandleAuthorizationCodeGrant(HttpContext context, IAuthorizationCodeStore codeStore, IRefreshTokenStore refreshTokenStore, JwtConfig jwtConfig, SigningCredentials creds, System.Collections.Specialized.NameValueCollection formData, string clientId, string clientSecret)
     {
         var code = formData["code"] ?? "";
         var redirectUri = formData["redirect_uri"] ?? "";
@@ -74,13 +74,13 @@ public static class TokenEndpoint
             });
         }
 
-        // Validate client credentials
-        if (string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(clientSecret))
+        // client_id is always required
+        if (string.IsNullOrEmpty(clientId))
         {
             return Results.BadRequest(new
             {
                 error = "invalid_client",
-                error_description = "Client credentials required"
+                error_description = "client_id is required"
             });
         }
 
@@ -95,8 +95,9 @@ public static class TokenEndpoint
             });
         }
 
-        // Validate client credentials
-        if (!codeStore.ValidateClient(clientId, clientSecret))
+        // Validate client credentials (public clients pass null secret)
+        var clientStore = context.RequestServices.GetRequiredService<IClientStore>();
+        if (!clientStore.ValidateClient(clientId, string.IsNullOrEmpty(clientSecret) ? null : clientSecret))
         {
             return Results.BadRequest(new
             {
@@ -337,15 +338,24 @@ public static class TokenEndpoint
         return Base64UrlEncoder.Encode(leftHalf);
     }
 
-    private static IResult HandleRefreshTokenGrant(IRefreshTokenStore refreshTokenStore, JwtConfig jwtConfig, SigningCredentials creds, System.Collections.Specialized.NameValueCollection formData, string clientId, string clientSecret)
+    private static IResult HandleRefreshTokenGrant(HttpContext context, IRefreshTokenStore refreshTokenStore, JwtConfig jwtConfig, SigningCredentials creds, System.Collections.Specialized.NameValueCollection formData, string clientId, string clientSecret)
     {
-        // Validate client credentials
-        if (string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(clientSecret))
+        if (string.IsNullOrEmpty(clientId))
         {
             return Results.BadRequest(new
             {
                 error = "invalid_client",
-                error_description = "Client credentials required"
+                error_description = "client_id is required"
+            });
+        }
+
+        var clientStore = context.RequestServices.GetRequiredService<IClientStore>();
+        if (!clientStore.ValidateClient(clientId, string.IsNullOrEmpty(clientSecret) ? null : clientSecret))
+        {
+            return Results.BadRequest(new
+            {
+                error = "invalid_client",
+                error_description = "Invalid client credentials"
             });
         }
 
