@@ -28,7 +28,7 @@ public class Program
             ?? new DynamicClientRegistrationConfig();
 
         // Load or generate RSA key for JWT signing and JWKS
-        var (rsaKey, keyId) = LoadOrCreateRsaKey(Path.Combine("run", "jwk.json"));
+        var (rsaKey, keyId) = LoadOrCreateRsaKey(jwtConfig.JwkPath);
         var rsaSecurityKey = new RsaSecurityKey(rsaKey)
         {
             KeyId = keyId
