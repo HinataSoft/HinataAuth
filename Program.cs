@@ -26,7 +26,7 @@ public class Program
         var refreshTokenConfig = jwtConfig.RefreshToken ?? new RefreshTokenConfig();
 
         // Load or generate RSA key for JWT signing and JWKS
-        var (rsaKey, keyId) = LoadOrCreateRsaKey("jwk.json");
+        var (rsaKey, keyId) = LoadOrCreateRsaKey(Path.Combine("run", "jwk.json"));
         var rsaSecurityKey = new RsaSecurityKey(rsaKey)
         {
             KeyId = keyId
@@ -175,6 +175,8 @@ public class Program
             };
 
             var jsonText = JsonSerializer.Serialize(jwkObj, new JsonSerializerOptions { WriteIndented = true });
+            var dir = Path.GetDirectoryName(filePath);
+            if (dir != null) Directory.CreateDirectory(dir);
             File.WriteAllText(filePath, jsonText);
             Console.WriteLine($"Created new RSA signing key and saved to {filePath} (kid: {newKid})");
         }

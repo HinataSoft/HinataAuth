@@ -21,6 +21,9 @@ mono_crash.*
 CLAUDE.md
 .claude/
 
+# Runtime data
+run/
+
 # Build results
 [Dd]ebug/
 [Dd]ebugPublic/

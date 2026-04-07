@@ -28,7 +28,7 @@ HinataAuth is designed for:
 
 > **Note**: For production deployments, consider using established solutions like Keycloak, Auth0, or IdentityServer. HinataAuth prioritizes simplicity over enterprise features.
 
-> **Note**: The RSA signing key is persisted to `jwk.json` in the working directory. On first run, a new key is generated and saved. On subsequent runs, the existing key is loaded so that tokens survive restarts. If the file is corrupt, an ephemeral key is used without overwriting the file.
+> **Note**: The RSA signing key is persisted to `run/jwk.json` in the working directory. On first run, a new key is generated and the `run/` directory is created automatically. On subsequent runs, the existing key is loaded so that tokens survive restarts. If the file is corrupt, an ephemeral key is used without overwriting the file.
 
 ## Quick Start
 
