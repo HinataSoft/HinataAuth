@@ -231,7 +231,7 @@ public class AuthorizationCodeFlowTests : IClassFixture<CustomWebApplicationFact
     }
 
     [Fact]
-    public async Task Authorize_Post_InvalidCredentials_ReturnsError()
+    public async Task Authorize_Post_InvalidCredentials_RedirectsBackWithError()
     {
         // Arrange
         var requestContent = new FormUrlEncodedContent(new Dictionary<string, string>
@@ -248,17 +248,15 @@ public class AuthorizationCodeFlowTests : IClassFixture<CustomWebApplicationFact
         // Act
         var response = await _client.PostAsync("/connect/authorize", requestContent);
 
-        // Assert
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        
-        var content = await response.Content.ReadAsStringAsync();
-        var errorResponse = JsonSerializer.Deserialize<JsonElement>(content);
-        
-        Assert.Equal("access_denied", errorResponse.GetProperty("error").GetString());
+        // Assert - redirects back to authorize.html with error
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        var location = response.Headers.Location!.ToString();
+        Assert.Contains("/authorize.html", location);
+        Assert.Contains("error=", location);
     }
 
     [Fact]
-    public async Task Authorize_Post_MissingCredentials_ReturnsError()
+    public async Task Authorize_Post_MissingCredentials_RedirectsBackWithError()
     {
         // Arrange
         var requestContent = new FormUrlEncodedContent(new Dictionary<string, string>
@@ -273,13 +271,11 @@ public class AuthorizationCodeFlowTests : IClassFixture<CustomWebApplicationFact
         // Act
         var response = await _client.PostAsync("/connect/authorize", requestContent);
 
-        // Assert
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        
-        var content = await response.Content.ReadAsStringAsync();
-        var errorResponse = JsonSerializer.Deserialize<JsonElement>(content);
-        
-        Assert.Equal("access_denied", errorResponse.GetProperty("error").GetString());
+        // Assert - redirects back to authorize.html with error
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        var location = response.Headers.Location!.ToString();
+        Assert.Contains("/authorize.html", location);
+        Assert.Contains("error=", location);
     }
 
     [Fact]

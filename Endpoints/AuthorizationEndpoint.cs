@@ -122,7 +122,7 @@ public static class AuthorizationEndpoint
         return Results.Redirect(authorizeUrl);
     }
 
-    private static async Task<IResult> HandlePost(HttpContext context, IAuthorizationCodeStore codeStore, IClientCredentialsStore credentialsStore)
+    private static async Task<IResult> HandlePost(HttpContext context, IAuthorizationCodeStore codeStore, IClientCredentialsStore credentialsStore, IConfiguration configuration)
     {
         var form = await context.Request.ReadFormAsync();
 
@@ -137,6 +137,25 @@ public static class AuthorizationEndpoint
         var codeChallenge = form["code_challenge"].ToString();
         var codeChallengeMethod = form["code_challenge_method"].ToString();
 
+        // Build authorize.html redirect URL for error cases (form submissions can't display JSON)
+        IResult RedirectBackWithError(string error)
+        {
+            var pathBase = configuration["PathBase"] ?? "";
+            var qs = HttpUtility.ParseQueryString(string.Empty);
+            qs["client_id"] = clientId;
+            qs["redirect_uri"] = redirectUri;
+            qs["scope"] = scope;
+            qs["state"] = state;
+            qs["response_type"] = responseType;
+            if (!string.IsNullOrEmpty(codeChallenge))
+            {
+                qs["code_challenge"] = codeChallenge;
+                qs["code_challenge_method"] = codeChallengeMethod;
+            }
+            qs["error"] = error;
+            return Results.Redirect($"{pathBase}/authorize.html?{qs}");
+        }
+
         // Validate required parameters
         if (string.IsNullOrEmpty(responseType) || string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(redirectUri))
         {
@@ -150,21 +169,13 @@ public static class AuthorizationEndpoint
         // Validate user credentials against AuthCredentials
         if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
         {
-            return Results.BadRequest(new
-            {
-                error = "access_denied",
-                error_description = "Username and password are required"
-            });
+            return RedirectBackWithError("Username and password are required");
         }
 
         // Validate credentials against AuthCredentials
         if (!credentialsStore.ValidateUserCredentials(username, password))
         {
-            return Results.BadRequest(new
-            {
-                error = "access_denied",
-                error_description = "Invalid username or password"
-            });
+            return RedirectBackWithError("Invalid username or password");
         }
 
         // Only support code response type

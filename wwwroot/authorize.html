@@ -224,7 +224,7 @@
             document.getElementById('buttons').style.display = 'flex';
         }
 
-        async function approve() {
+        function approve() {
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
             
@@ -238,41 +238,37 @@
             const params = new URLSearchParams(window.location.search);
             params.set('consent', 'approved');
             
-            try {
-                // Build form data including credentials
-                const formData = new URLSearchParams();
-                formData.append('response_type', params.get('response_type') || 'code');
-                formData.append('client_id', params.get('client_id') || '');
-                formData.append('redirect_uri', params.get('redirect_uri') || '');
-                formData.append('scope', params.get('scope') || '');
-                formData.append('state', params.get('state') || '');
-                formData.append('consent', 'approved');
-                formData.append('username', username);
-                formData.append('password', password);
-                
-                const response = await fetch(basePath + '/connect/authorize', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded'
-                    },
-                    body: formData.toString()
-                });
-                
-                if (response.redirected) {
-                    window.location.href = response.url;
-                } else {
-                    const data = await response.json();
-                    if (data.error) {
-                        const errorDiv = document.getElementById('error');
-                        errorDiv.textContent = data.error_description || data.error;
-                        errorDiv.style.display = 'block';
-                    }
+            // Submit via a real form so the browser follows the 302 redirect
+            // natively (fetch cannot follow cross-origin redirects)
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = basePath + '/connect/authorize';
+
+            const fields = {
+                response_type: params.get('response_type') || 'code',
+                client_id: params.get('client_id') || '',
+                redirect_uri: params.get('redirect_uri') || '',
+                scope: params.get('scope') || '',
+                state: params.get('state') || '',
+                code_challenge: params.get('code_challenge') || '',
+                code_challenge_method: params.get('code_challenge_method') || '',
+                consent: 'approved',
+                username: username,
+                password: password
+            };
+
+            for (const [key, value] of Object.entries(fields)) {
+                if (value) {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = key;
+                    input.value = value;
+                    form.appendChild(input);
                 }
-            } catch (err) {
-                const errorDiv = document.getElementById('error');
-                errorDiv.textContent = 'An error occurred. Please try again.';
-                errorDiv.style.display = 'block';
             }
+
+            document.body.appendChild(form);
+            form.submit();
         }
 
         function deny() {
