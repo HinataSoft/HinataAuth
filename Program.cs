@@ -68,15 +68,21 @@ public class Program
 
         builder.Services.AddAuthorization();
 
-        builder.Services.AddCors(options =>
+        // Configure CORS if allowed origins are specified
+        var corsConfig = builder.Configuration.GetSection("Cors").Get<CorsConfig>()
+            ?? new CorsConfig();
+        if (corsConfig.AllowedOrigins.Length > 0)
         {
-            options.AddPolicy("AllowAll", policy =>
+            builder.Services.AddCors(options =>
             {
-                policy.AllowAnyOrigin()
-                      .AllowAnyMethod()
-                      .AllowAnyHeader();
+                options.AddPolicy("Configured", policy =>
+                {
+                    policy.WithOrigins(corsConfig.AllowedOrigins)
+                          .AllowAnyMethod()
+                          .AllowAnyHeader();
+                });
             });
-        });
+        }
 
         var app = builder.Build();
 
@@ -108,7 +114,10 @@ public class Program
             DefaultFileNames = [ "test.html" ],
         });
         app.UseStaticFiles();
-        app.UseCors("AllowAll");
+        if (corsConfig.AllowedOrigins.Length > 0)
+        {
+            app.UseCors("Configured");
+        }
         app.UseAuthentication();
         app.UseAuthorization();
 

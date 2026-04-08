@@ -131,6 +131,16 @@ This way, one can log in somewhere as a user and, at the same time, provide the 
 
 Dynamic clients are limited to `authorization_code` and `refresh_token` grant types. Registered clients can be read, updated, or deleted via the management endpoint using the `registration_access_token` returned at registration.
 
+### Cors - Cross-Origin Resource Sharing (optional)
+
+```json
+"Cors": {
+  "allowedOrigins": ["http://localhost:5173", "https://myapp.example.com"]
+}
+```
+
+- `allowedOrigins` — list of origins allowed to make cross-origin requests (e.g. SPA clients calling the token endpoint). When empty or omitted, no CORS headers are added (suitable for reverse-proxy deployments where CORS is handled at the proxy level).
+
 ### PathBase - Base path for redirects (optional)
 
 ```json
