@@ -38,11 +38,12 @@ public class ClientStore : IClientStore
                 redirectUris.Add(authCodeConfig.DefaultRedirectUri);
             }
 
+            var isPublic = string.IsNullOrEmpty(client.ClientSecret);
             var registration = new ClientRegistration
             {
                 ClientId = client.ClientId,
-                ClientSecretHash = HashSecret(client.ClientSecret),
-                TokenEndpointAuthMethod = "client_secret_post",
+                ClientSecretHash = isPublic ? null : HashSecret(client.ClientSecret),
+                TokenEndpointAuthMethod = isPublic ? "none" : "client_secret_post",
                 GrantTypes = new List<string> { "authorization_code", "refresh_token" },
                 ResponseTypes = new List<string> { "code" },
                 RedirectUris = redirectUris,
