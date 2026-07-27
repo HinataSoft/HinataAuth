@@ -320,8 +320,6 @@ public static class TokenEndpoint
             jwtConfig,
             creds);
 
-        Console.WriteLine("Issued a token: " + accessToken);
-
         return Results.Ok(new
         {
             access_token = accessToken,
