@@ -381,6 +381,15 @@ public static class TokenEndpoint
             claims.Add(new Claim("scope", scopeItem));
         }
 
+        // Add configured claims (from AuthCredentials "claims" in appsettings.json)
+        var configuredClaims = credentialsStore.GetUserClaims(clientId);
+        foreach (var claim in configuredClaims)
+        {
+            if (claim.Key == "sub_type")
+                continue;
+            claims.Add(new Claim(claim.Key, claim.Value));
+        }
+
         // Create token
         var tokenDescriptor = new SecurityTokenDescriptor
         {
@@ -395,8 +404,13 @@ public static class TokenEndpoint
         var token = tokenHandler.CreateToken(tokenDescriptor);
         var accessToken = tokenHandler.WriteToken(token);
 
-        // Create refresh token (with rotation - new token each time)
-        var refreshToken = refreshTokenStore.CreateToken(clientId, null, scopeString, new Dictionary<string, string> { ["sub_type"] = "client" });
+        // Create refresh token (with rotation - new token each time);
+        // carry the configured claims so they survive token refresh
+        var refreshUserClaims = new Dictionary<string, string>(configuredClaims)
+        {
+            ["sub_type"] = "client"
+        };
+        var refreshToken = refreshTokenStore.CreateToken(clientId, null, scopeString, refreshUserClaims);
 
         return Results.Ok(new
         {
@@ -465,8 +479,21 @@ public static class TokenEndpoint
             });
         }
 
+        // Validate against ClientStore (authorization code + dynamic clients); clients known
+        // only to AuthCredentials (machine-to-machine) fall back to the credentials store
         var clientStore = context.RequestServices.GetRequiredService<IClientStore>();
-        if (!clientStore.ValidateClient(clientId, string.IsNullOrEmpty(clientSecret) ? null : clientSecret))
+        bool validClient;
+        if (clientStore.GetClient(clientId) != null)
+        {
+            validClient = clientStore.ValidateClient(clientId, string.IsNullOrEmpty(clientSecret) ? null : clientSecret);
+        }
+        else
+        {
+            var credentialsStore = context.RequestServices.GetRequiredService<IClientCredentialsStore>();
+            validClient = credentialsStore.ValidateClientCredentials(clientId, clientSecret);
+        }
+
+        if (!validClient)
         {
             return InvalidClientResult(context, usedBasicAuth, "Invalid client credentials");
         }

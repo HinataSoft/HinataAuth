@@ -275,6 +275,32 @@ public class ClientCredentialsFlowTests
     }
 
     [Fact]
+    public async Task ClientCredentials_AccessTokenIncludesConfiguredClaims()
+    {
+        // Arrange - test-subject has claims configured in appsettings.Test.json
+        var tokenRequest = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            { "grant_type", "client_credentials" },
+            { "client_id", TestClientId },
+            { "client_secret", TestClientSecret }
+        });
+
+        // Act
+        var response = await _client.PostAsync("/connect/token", tokenRequest);
+        var content = await response.Content.ReadAsStringAsync();
+        var tokenResponse = JsonSerializer.Deserialize<JsonElement>(content);
+
+        var accessToken = tokenResponse.GetProperty("access_token").GetString()!;
+
+        var tokenHandler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
+        var jwtToken = tokenHandler.ReadJwtToken(accessToken);
+
+        // Assert - configured claims are present in the access token
+        Assert.Contains(jwtToken.Claims, c => c.Type == "name" && c.Value == "Test User");
+        Assert.Contains(jwtToken.Claims, c => c.Type == "email" && c.Value == "test@example.com");
+    }
+
+    [Fact]
     public async Task ClientCredentials_DefaultScope_UsesConfiguredScope()
     {
         // Arrange - no scope requested, should use configured scope
@@ -348,6 +374,82 @@ public class ClientCredentialsFlowTests
 
         // id_token should NOT be present for client credentials flow
         Assert.False(tokenResponse.TryGetProperty("id_token", out _));
+    }
+
+    [Fact]
+    public async Task ClientCredentials_RefreshToken_IssuesNewTokenWithClaims()
+    {
+        // Step 1: Get initial token pair via client_credentials
+        var tokenRequest = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            { "grant_type", "client_credentials" },
+            { "client_id", TestClientId },
+            { "client_secret", TestClientSecret },
+            { "scope", "auth" }
+        });
+        var tokenResponse = await _client.PostAsync("/connect/token", tokenRequest);
+        Assert.Equal(HttpStatusCode.OK, tokenResponse.StatusCode);
+
+        var tokenJson = JsonSerializer.Deserialize<JsonElement>(await tokenResponse.Content.ReadAsStringAsync());
+        var refreshToken = tokenJson.GetProperty("refresh_token").GetString()!;
+
+        // Step 2: Use the refresh token
+        var refreshRequest = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            { "grant_type", "refresh_token" },
+            { "client_id", TestClientId },
+            { "client_secret", TestClientSecret },
+            { "refresh_token", refreshToken }
+        });
+        var refreshResponse = await _client.PostAsync("/connect/token", refreshRequest);
+
+        Assert.Equal(HttpStatusCode.OK, refreshResponse.StatusCode);
+        var refreshJson = JsonSerializer.Deserialize<JsonElement>(await refreshResponse.Content.ReadAsStringAsync());
+
+        var newAccessToken = refreshJson.GetProperty("access_token").GetString()!;
+        Assert.False(string.IsNullOrEmpty(newAccessToken));
+
+        // Rotation: a new refresh token is issued
+        var newRefreshToken = refreshJson.GetProperty("refresh_token").GetString()!;
+        Assert.NotEqual(refreshToken, newRefreshToken);
+
+        // No id_token for machine-to-machine flow
+        Assert.False(refreshJson.TryGetProperty("id_token", out _));
+
+        // Configured claims survive the refresh
+        var tokenHandler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
+        var jwtToken = tokenHandler.ReadJwtToken(newAccessToken);
+        Assert.Contains(jwtToken.Claims, c => c.Type == "name" && c.Value == "Test User");
+        Assert.Contains(jwtToken.Claims, c => c.Type == "sub_type" && c.Value == "client");
+    }
+
+    [Fact]
+    public async Task ClientCredentials_RefreshToken_WrongSecret_ReturnsError()
+    {
+        // Get a valid refresh token first
+        var tokenRequest = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            { "grant_type", "client_credentials" },
+            { "client_id", TestClientId },
+            { "client_secret", TestClientSecret }
+        });
+        var tokenResponse = await _client.PostAsync("/connect/token", tokenRequest);
+        var tokenJson = JsonSerializer.Deserialize<JsonElement>(await tokenResponse.Content.ReadAsStringAsync());
+        var refreshToken = tokenJson.GetProperty("refresh_token").GetString()!;
+
+        // Try to refresh with a wrong secret
+        var refreshRequest = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            { "grant_type", "refresh_token" },
+            { "client_id", TestClientId },
+            { "client_secret", "wrong-secret" },
+            { "refresh_token", refreshToken }
+        });
+        var refreshResponse = await _client.PostAsync("/connect/token", refreshRequest);
+
+        Assert.Equal(HttpStatusCode.BadRequest, refreshResponse.StatusCode);
+        var error = JsonSerializer.Deserialize<JsonElement>(await refreshResponse.Content.ReadAsStringAsync());
+        Assert.Equal("invalid_client", error.GetProperty("error").GetString());
     }
 
     [Fact]
