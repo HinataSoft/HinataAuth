@@ -226,6 +226,23 @@ curl -X POST http://localhost:5999/connect/token \
   -d "grant_type=client_credentials&client_id=my-client&client_secret=secret&scope=read"
 ```
 
+Client credentials may alternatively be sent via HTTP Basic authentication (`client_secret_basic`, RFC 6749 §2.3.1). Credentials must not be present in both the header and the body at once:
+
+```bash
+curl -X POST http://localhost:5999/connect/token \
+  -u "my-client:secret" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=client_credentials&scope=read"
+```
+
+The token endpoint also accepts a JSON request body as a non-standard convenience:
+
+```bash
+curl -X POST http://localhost:5999/connect/token \
+  -H "Content-Type: application/json" \
+  -d '{"grant_type": "client_credentials", "client_id": "my-client", "client_secret": "secret", "scope": "read"}'
+```
+
 Response:
 ```json
 {

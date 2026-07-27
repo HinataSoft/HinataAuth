@@ -143,13 +143,30 @@ public class DynamicClientRegistrationTests
         {
             client_name = "bad-auth",
             redirect_uris = new[] { "http://localhost:9999/callback" },
-            token_endpoint_auth_method = "client_secret_basic"
+            token_endpoint_auth_method = "private_key_jwt"
         };
         var response = await PostRegistration(request);
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
 
         var body = await ParseJson(response);
         Assert.Equal("invalid_client_metadata", body.GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task Register_ClientSecretBasic_Accepted()
+    {
+        var request = new
+        {
+            client_name = "basic-auth-client",
+            redirect_uris = new[] { "http://localhost:9999/callback" },
+            token_endpoint_auth_method = "client_secret_basic"
+        };
+        var response = await PostRegistration(request);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+        var reg = await ParseJson(response);
+        Assert.Equal("client_secret_basic", reg.GetProperty("token_endpoint_auth_method").GetString());
+        Assert.False(string.IsNullOrEmpty(reg.GetProperty("client_secret").GetString()));
     }
 
     [Fact]

@@ -1,6 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
+using System.Text.Json;
 using System.Web;
 using HinataAuth.Models;
 using HinataAuth.Services;
@@ -23,30 +24,70 @@ public static class TokenEndpoint
             // Read the body
             using var reader = new StreamReader(context.Request.Body);
             var body = await reader.ReadToEndAsync();
-            
-            // Parse form data
-            var formData = HttpUtility.ParseQueryString(body);
-            
+
+            // Parse parameters: form-urlencoded per RFC 6749, JSON as a non-standard convenience
+            System.Collections.Specialized.NameValueCollection formData;
+            if (context.Request.HasJsonContentType())
+            {
+                var jsonData = ParseJsonBody(body);
+                if (jsonData == null)
+                {
+                    return Results.BadRequest(new
+                    {
+                        error = "invalid_request",
+                        error_description = "Request body is not a valid JSON object"
+                    });
+                }
+                formData = jsonData;
+            }
+            else
+            {
+                formData = HttpUtility.ParseQueryString(body);
+            }
+
             var grantType = formData["grant_type"] ?? "";
             var clientId = formData["client_id"] ?? "";
             var clientSecret = formData["client_secret"] ?? "";
 
+            // client_secret_basic (RFC 6749 §2.3.1)
+            var usedBasicAuth = false;
+            var authHeader = context.Request.Headers.Authorization.ToString();
+            if (authHeader.StartsWith("Basic ", StringComparison.OrdinalIgnoreCase))
+            {
+                // RFC 6749 §2.3: clients must not use more than one authentication method
+                if (!string.IsNullOrEmpty(clientId) || !string.IsNullOrEmpty(clientSecret))
+                {
+                    return Results.BadRequest(new
+                    {
+                        error = "invalid_request",
+                        error_description = "Client credentials must not be sent in both the Authorization header and the request body"
+                    });
+                }
+
+                if (!TryParseBasicCredentials(authHeader, out clientId, out clientSecret))
+                {
+                    return InvalidClientResult(context, true, "Malformed Basic authorization header");
+                }
+
+                usedBasicAuth = true;
+            }
+
             // Handle authorization_code grant type
             if (grantType == "authorization_code")
             {
-                var result = HandleAuthorizationCodeGrant(context, codeStore, refreshTokenStore, jwtConfigSvc, credsSvc, formData, clientId, clientSecret);
+                var result = HandleAuthorizationCodeGrant(context, codeStore, refreshTokenStore, jwtConfigSvc, credsSvc, formData, clientId, clientSecret, usedBasicAuth);
                 return result;
             }
             // Handle client_credentials grant type
             else if (grantType == "client_credentials")
             {
-                var result = HandleClientCredentialGrant(credentialsStore, refreshTokenStore, jwtConfigSvc, credsSvc, formData, clientId, clientSecret);
+                var result = HandleClientCredentialGrant(context, credentialsStore, refreshTokenStore, jwtConfigSvc, credsSvc, formData, clientId, clientSecret, usedBasicAuth);
                 return result;
             }
             // Handle refresh_token grant type
             else if (grantType == "refresh_token")
             {
-                var result = HandleRefreshTokenGrant(context, refreshTokenStore, jwtConfigSvc, credsSvc, formData, clientId, clientSecret);
+                var result = HandleRefreshTokenGrant(context, refreshTokenStore, jwtConfigSvc, credsSvc, formData, clientId, clientSecret, usedBasicAuth);
                 return result;
             }
             
@@ -58,7 +99,90 @@ public static class TokenEndpoint
         });
     }
 
-    private static IResult HandleAuthorizationCodeGrant(HttpContext context, IAuthorizationCodeStore codeStore, IRefreshTokenStore refreshTokenStore, JwtConfig jwtConfig, SigningCredentials creds, System.Collections.Specialized.NameValueCollection formData, string clientId, string clientSecret)
+    /// <summary>
+    /// Parses a flat JSON object into the same shape as parsed form data.
+    /// Returns null when the body is not a valid JSON object.
+    /// </summary>
+    private static System.Collections.Specialized.NameValueCollection? ParseJsonBody(string body)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+                return null;
+
+            var result = new System.Collections.Specialized.NameValueCollection();
+            foreach (var property in doc.RootElement.EnumerateObject())
+            {
+                switch (property.Value.ValueKind)
+                {
+                    case JsonValueKind.String:
+                        result[property.Name] = property.Value.GetString();
+                        break;
+                    case JsonValueKind.Number:
+                    case JsonValueKind.True:
+                    case JsonValueKind.False:
+                        result[property.Name] = property.Value.GetRawText();
+                        break;
+                    // nested objects, arrays and nulls are ignored
+                }
+            }
+            return result;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static bool TryParseBasicCredentials(string authHeader, out string clientId, out string clientSecret)
+    {
+        clientId = "";
+        clientSecret = "";
+
+        var encoded = authHeader["Basic ".Length..].Trim();
+        string decoded;
+        try
+        {
+            decoded = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(encoded));
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+
+        var separator = decoded.IndexOf(':');
+        if (separator < 0)
+            return false;
+
+        // RFC 6749 §2.3.1: id and secret are form-urlencoded before base64 encoding
+        clientId = HttpUtility.UrlDecode(decoded[..separator]);
+        clientSecret = HttpUtility.UrlDecode(decoded[(separator + 1)..]);
+        return clientId.Length > 0;
+    }
+
+    // RFC 6749 §5.2: when the client authenticated via the Authorization header,
+    // invalid_client must be a 401 with a matching WWW-Authenticate header
+    private static IResult InvalidClientResult(HttpContext context, bool usedBasicAuth, string description)
+    {
+        if (usedBasicAuth)
+        {
+            context.Response.Headers.WWWAuthenticate = "Basic realm=\"token\"";
+            return Results.Json(new
+            {
+                error = "invalid_client",
+                error_description = description
+            }, statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        return Results.BadRequest(new
+        {
+            error = "invalid_client",
+            error_description = description
+        });
+    }
+
+    private static IResult HandleAuthorizationCodeGrant(HttpContext context, IAuthorizationCodeStore codeStore, IRefreshTokenStore refreshTokenStore, JwtConfig jwtConfig, SigningCredentials creds, System.Collections.Specialized.NameValueCollection formData, string clientId, string clientSecret, bool usedBasicAuth)
     {
         var code = formData["code"] ?? "";
         var redirectUri = formData["redirect_uri"] ?? "";
@@ -99,11 +223,7 @@ public static class TokenEndpoint
         var clientStore = context.RequestServices.GetRequiredService<IClientStore>();
         if (!clientStore.ValidateClient(clientId, string.IsNullOrEmpty(clientSecret) ? null : clientSecret))
         {
-            return Results.BadRequest(new
-            {
-                error = "invalid_client",
-                error_description = "Invalid client credentials"
-            });
+            return InvalidClientResult(context, usedBasicAuth, "Invalid client credentials");
         }
 
         // PKCE verification
@@ -213,16 +333,12 @@ public static class TokenEndpoint
         });
     }
 
-    private static IResult HandleClientCredentialGrant(IClientCredentialsStore credentialsStore, IRefreshTokenStore refreshTokenStore, JwtConfig jwtConfig, SigningCredentials creds, System.Collections.Specialized.NameValueCollection formData, string clientId, string clientSecret)
+    private static IResult HandleClientCredentialGrant(HttpContext context, IClientCredentialsStore credentialsStore, IRefreshTokenStore refreshTokenStore, JwtConfig jwtConfig, SigningCredentials creds, System.Collections.Specialized.NameValueCollection formData, string clientId, string clientSecret, bool usedBasicAuth)
     {
         // Validate client credentials
         if (!credentialsStore.ValidateClientCredentials(clientId, clientSecret))
         {
-            return Results.BadRequest(new
-            {
-                error = "invalid_client",
-                error_description = "Invalid client credentials"
-            });
+            return InvalidClientResult(context, usedBasicAuth, "Invalid client credentials");
         }
 
         // Get configured scopes
@@ -338,7 +454,7 @@ public static class TokenEndpoint
         return Base64UrlEncoder.Encode(leftHalf);
     }
 
-    private static IResult HandleRefreshTokenGrant(HttpContext context, IRefreshTokenStore refreshTokenStore, JwtConfig jwtConfig, SigningCredentials creds, System.Collections.Specialized.NameValueCollection formData, string clientId, string clientSecret)
+    private static IResult HandleRefreshTokenGrant(HttpContext context, IRefreshTokenStore refreshTokenStore, JwtConfig jwtConfig, SigningCredentials creds, System.Collections.Specialized.NameValueCollection formData, string clientId, string clientSecret, bool usedBasicAuth)
     {
         if (string.IsNullOrEmpty(clientId))
         {
@@ -352,11 +468,7 @@ public static class TokenEndpoint
         var clientStore = context.RequestServices.GetRequiredService<IClientStore>();
         if (!clientStore.ValidateClient(clientId, string.IsNullOrEmpty(clientSecret) ? null : clientSecret))
         {
-            return Results.BadRequest(new
-            {
-                error = "invalid_client",
-                error_description = "Invalid client credentials"
-            });
+            return InvalidClientResult(context, usedBasicAuth, "Invalid client credentials");
         }
 
         // Get the refresh token

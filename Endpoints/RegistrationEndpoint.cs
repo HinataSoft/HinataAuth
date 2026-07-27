@@ -14,7 +14,7 @@ public static class RegistrationEndpoint
 
     private static readonly HashSet<string> AllowedGrantTypes = new() { "authorization_code", "refresh_token" };
     private static readonly HashSet<string> AllowedResponseTypes = new() { "code" };
-    private static readonly HashSet<string> AllowedAuthMethods = new() { "none", "client_secret_post" };
+    private static readonly HashSet<string> AllowedAuthMethods = new() { "none", "client_secret_post", "client_secret_basic" };
 
     public static void MapRegistrationEndpoint(this WebApplication app)
     {
@@ -88,8 +88,8 @@ public static class RegistrationEndpoint
                     return InvalidClientMetadata($"Unsupported token_endpoint_auth_method: {authMethod}");
             }
 
-            if (authMethod == "client_secret_post" && !dcrConfig.AllowConfidentialClients)
-                return InvalidClientMetadata("Confidential clients (client_secret_post) are not allowed. Set AllowConfidentialClients to true in configuration to enable this.");
+            if (authMethod != "none" && !dcrConfig.AllowConfidentialClients)
+                return InvalidClientMetadata($"Confidential clients ({authMethod}) are not allowed. Set AllowConfidentialClients to true in configuration to enable this.");
 
             // Parse scope (optional, space-separated string)
             var scopes = new List<string>(dcrConfig.AllowedScopes);
@@ -302,8 +302,8 @@ public static class RegistrationEndpoint
                     return InvalidClientMetadata($"Unsupported token_endpoint_auth_method: {authMethod}");
             }
 
-            if (authMethod == "client_secret_post" && !dcrConfig.AllowConfidentialClients)
-                return InvalidClientMetadata("Confidential clients (client_secret_post) are not allowed. Set AllowConfidentialClients to true in configuration to enable this.");
+            if (authMethod != "none" && !dcrConfig.AllowConfidentialClients)
+                return InvalidClientMetadata($"Confidential clients ({authMethod}) are not allowed. Set AllowConfidentialClients to true in configuration to enable this.");
 
             // Parse scope
             var scopes = new List<string>(dcrConfig.AllowedScopes);

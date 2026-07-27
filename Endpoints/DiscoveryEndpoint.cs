@@ -27,8 +27,8 @@ public static class DiscoveryEndpoint
         var scopesSupported = scopes.Length > 0 ? scopes : new[] { "auth" };
 
         var tokenAuthMethods = dcrConfig.Enabled
-            ? new[] { "client_secret_post", "none" }
-            : new[] { "client_secret_post" };
+            ? new[] { "client_secret_basic", "client_secret_post", "none" }
+            : new[] { "client_secret_basic", "client_secret_post" };
 
         var discoveryDocument = new Dictionary<string, object>
         {
