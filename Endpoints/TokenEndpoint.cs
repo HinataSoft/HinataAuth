@@ -20,7 +20,11 @@ public static class TokenEndpoint
             var refreshTokenStore = context.RequestServices.GetRequiredService<IRefreshTokenStore>();
             var jwtConfigSvc = context.RequestServices.GetRequiredService<JwtConfig>();
             var credsSvc = context.RequestServices.GetRequiredService<SigningCredentials>();
-            
+
+            // RFC 6749 §5.1: token responses must not be cached
+            context.Response.Headers.CacheControl = "no-store";
+            context.Response.Headers.Pragma = "no-cache";
+
             // Read the body
             using var reader = new StreamReader(context.Request.Body);
             var body = await reader.ReadToEndAsync();
@@ -318,7 +322,8 @@ public static class TokenEndpoint
             authCode.UserClaims,
             accessToken,
             jwtConfig,
-            creds);
+            creds,
+            authCode.Nonce);
 
         return Results.Ok(new
         {
@@ -426,7 +431,8 @@ public static class TokenEndpoint
         Dictionary<string, string> userClaims,
         string accessToken,
         JwtConfig jwtConfig,
-        SigningCredentials creds)
+        SigningCredentials creds,
+        string? nonce = null)
     {
         var claims = new List<Claim>
         {
@@ -434,6 +440,13 @@ public static class TokenEndpoint
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             new("at_hash", ComputeAtHash(accessToken))
         };
+
+        // OIDC Core §3.1.3.6: nonce from the authentication request is passed
+        // through to the id_token (initial issuance only, not on refresh)
+        if (!string.IsNullOrEmpty(nonce))
+        {
+            claims.Add(new Claim("nonce", nonce));
+        }
 
         // Add user claims (name, email, etc.)
         foreach (var claim in userClaims)

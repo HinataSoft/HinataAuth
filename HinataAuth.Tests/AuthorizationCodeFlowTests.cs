@@ -108,21 +108,24 @@ public class AuthorizationCodeFlowTests : IClassFixture<CustomWebApplicationFact
     }
 
     [Fact]
-    public async Task Authorize_Get_InvalidResponseType_ReturnsError()
+    public async Task Authorize_Get_InvalidResponseType_RedirectsWithError()
     {
-        // Arrange
-        var requestUri = $"/connect/authorize?response_type=token&client_id={TestClientId}&redirect_uri={Uri.EscapeDataString(TestRedirectUri)}";
+        // Arrange - client_id and redirect_uri are valid, so per RFC 6749 §4.1.2.1
+        // the error must be delivered via redirect to redirect_uri
+        var requestUri = $"/connect/authorize?response_type=token&client_id={TestClientId}&redirect_uri={Uri.EscapeDataString(TestRedirectUri)}&state=test-state";
 
         // Act
         var response = await _client.GetAsync(requestUri);
 
         // Assert
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        
-        var content = await response.Content.ReadAsStringAsync();
-        var errorResponse = JsonSerializer.Deserialize<JsonElement>(content);
-        
-        Assert.Equal("unsupported_response_type", errorResponse.GetProperty("error").GetString());
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+
+        var location = response.Headers.Location!.ToString();
+        Assert.StartsWith(TestRedirectUri, location);
+
+        var queryParams = System.Web.HttpUtility.ParseQueryString(new Uri(location).Query);
+        Assert.Equal("unsupported_response_type", queryParams["error"]);
+        Assert.Equal("test-state", queryParams["state"]);
     }
 
     [Fact]
@@ -162,7 +165,7 @@ public class AuthorizationCodeFlowTests : IClassFixture<CustomWebApplicationFact
     }
 
     [Fact]
-    public async Task Authorize_Get_InvalidScope_ReturnsError()
+    public async Task Authorize_Get_InvalidScope_RedirectsWithError()
     {
         // Arrange - request scope not allowed for client
         var requestUri = $"/connect/authorize?response_type=code&client_id={TestClientId}&redirect_uri={Uri.EscapeDataString(TestRedirectUri)}&scope=admin";
@@ -170,15 +173,14 @@ public class AuthorizationCodeFlowTests : IClassFixture<CustomWebApplicationFact
         // Act
         var response = await _client.GetAsync(requestUri);
 
-        // Assert - should filter to allowed scopes or return error
-        var content = await response.Content.ReadAsStringAsync();
-        var errorResponse = JsonSerializer.Deserialize<JsonElement>(content);
-        
-        // Scope validation may filter or error depending on implementation
-        Assert.True(
-            errorResponse.GetProperty("error").GetString() == "invalid_scope" ||
-            response.StatusCode == HttpStatusCode.Redirect
-        );
+        // Assert - error is delivered via redirect per RFC 6749 §4.1.2.1
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+
+        var location = response.Headers.Location!.ToString();
+        Assert.StartsWith(TestRedirectUri, location);
+
+        var queryParams = System.Web.HttpUtility.ParseQueryString(new Uri(location).Query);
+        Assert.Equal("invalid_scope", queryParams["error"]);
     }
 
     [Fact]
@@ -1008,10 +1010,12 @@ public class AuthorizationCodeFlowTests : IClassFixture<CustomWebApplicationFact
         });
 
         var authorizeResponse = await _client.PostAsync("/connect/authorize", authorizeContent);
-        Assert.Equal(HttpStatusCode.BadRequest, authorizeResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Redirect, authorizeResponse.StatusCode);
 
-        var errorJson = JsonSerializer.Deserialize<JsonElement>(await authorizeResponse.Content.ReadAsStringAsync());
-        Assert.Equal("invalid_request", errorJson.GetProperty("error").GetString());
+        var location = authorizeResponse.Headers.Location!.ToString();
+        Assert.StartsWith(TestRedirectUri, location);
+        var queryParams = System.Web.HttpUtility.ParseQueryString(new Uri(location).Query);
+        Assert.Equal("invalid_request", queryParams["error"]);
     }
 
     [Fact]
@@ -1030,10 +1034,71 @@ public class AuthorizationCodeFlowTests : IClassFixture<CustomWebApplicationFact
         });
 
         var authorizeResponse = await _client.PostAsync("/connect/authorize", authorizeContent);
-        Assert.Equal(HttpStatusCode.BadRequest, authorizeResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Redirect, authorizeResponse.StatusCode);
 
-        var errorJson = JsonSerializer.Deserialize<JsonElement>(await authorizeResponse.Content.ReadAsStringAsync());
-        Assert.Equal("invalid_request", errorJson.GetProperty("error").GetString());
+        var location = authorizeResponse.Headers.Location!.ToString();
+        Assert.StartsWith(TestRedirectUri, location);
+        var queryParams = System.Web.HttpUtility.ParseQueryString(new Uri(location).Query);
+        Assert.Equal("invalid_request", queryParams["error"]);
+    }
+
+    [Fact]
+    public async Task Authorize_Get_Nonce_ForwardedToAuthorizePage()
+    {
+        // Arrange
+        var requestUri = $"/connect/authorize?response_type=code&client_id={TestClientId}&redirect_uri={Uri.EscapeDataString(TestRedirectUri)}&scope={TestScope}&nonce=test-nonce-123";
+
+        // Act
+        var response = await _client.GetAsync(requestUri);
+
+        // Assert - nonce must be carried through to the authorization UI
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+
+        var location = response.Headers.Location!.ToString();
+        Assert.Contains("authorize.html", location);
+        Assert.Contains("nonce=test-nonce-123", location);
+    }
+
+    [Fact]
+    public async Task AuthCodeFlow_Nonce_IncludedInIdToken()
+    {
+        // Step 1: Authorize with a nonce (OIDC Core §3.1.2.1)
+        var authorizeContent = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["response_type"] = "code",
+            ["client_id"] = TestClientId,
+            ["redirect_uri"] = TestRedirectUri,
+            ["scope"] = TestScope,
+            ["consent"] = "approved",
+            ["username"] = TestUsername,
+            ["password"] = TestPassword,
+            ["nonce"] = "oidc-nonce-456"
+        });
+
+        var authorizeResponse = await _client.PostAsync("/connect/authorize", authorizeContent);
+        Assert.Equal(HttpStatusCode.Redirect, authorizeResponse.StatusCode);
+        var code = ExtractCodeFromRedirect(authorizeResponse.Headers.Location!.ToString());
+
+        // Step 2: Exchange the code
+        var tokenContent = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["grant_type"] = "authorization_code",
+            ["code"] = code,
+            ["redirect_uri"] = TestRedirectUri,
+            ["client_id"] = TestClientId,
+            ["client_secret"] = TestClientSecret
+        });
+
+        var tokenResponse = await _client.PostAsync("/connect/token", tokenContent);
+        Assert.Equal(HttpStatusCode.OK, tokenResponse.StatusCode);
+
+        var tokenJson = JsonSerializer.Deserialize<JsonElement>(await tokenResponse.Content.ReadAsStringAsync());
+        var idToken = tokenJson.GetProperty("id_token").GetString()!;
+
+        // Step 3: id_token must contain the nonce claim (OIDC Core §2)
+        var tokenHandler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
+        var jwtToken = tokenHandler.ReadJwtToken(idToken);
+        Assert.Contains(jwtToken.Claims, c => c.Type == "nonce" && c.Value == "oidc-nonce-456");
     }
 
     [Fact]

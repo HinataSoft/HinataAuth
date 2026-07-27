@@ -78,6 +78,40 @@ public class UserInfoEndpointTests : IClassFixture<CustomWebApplicationFactory<P
     }
 
     [Fact]
+    public async Task UserInfo_NoToken_401IncludesWwwAuthenticate()
+    {
+        // Act
+        var response = await _client.GetAsync("/connect/userinfo");
+
+        // Assert - RFC 6750 §3: 401 must carry WWW-Authenticate: Bearer
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Contains(response.Headers.WwwAuthenticate, h => h.Scheme == "Bearer");
+    }
+
+    [Fact]
+    public async Task UserInfo_Post_ValidToken_ReturnsUserInfo()
+    {
+        // Arrange - OIDC Core §5.3 requires POST support
+        var accessToken = await GetAccessTokenAsync();
+        var request = new HttpRequestMessage(HttpMethod.Post, "/connect/userinfo")
+        {
+            Content = new FormUrlEncodedContent(new Dictionary<string, string>())
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        // Act
+        var response = await _client.SendAsync(request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var content = await response.Content.ReadAsStringAsync();
+        var userInfo = JsonSerializer.Deserialize<JsonElement>(content);
+
+        Assert.Equal(TestUsername, userInfo.GetProperty("sub").GetString());
+    }
+
+    [Fact]
     public async Task UserInfo_ValidToken_ReturnsUserInfo()
     {
         // Arrange

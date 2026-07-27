@@ -191,6 +191,38 @@ public class TokenEndpointRequestTests
     }
 
     [Fact]
+    public async Task TokenResponse_HasNoStoreCacheHeaders()
+    {
+        // RFC 6749 §5.1: token responses must not be cached
+        var requestContent = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            { "grant_type", "client_credentials" },
+            { "client_id", TestClientId },
+            { "client_secret", TestClientSecret }
+        });
+
+        var response = await _client.PostAsync("/connect/token", requestContent);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(response.Headers.CacheControl?.NoStore);
+        Assert.Contains("no-cache", response.Headers.Pragma.ToString());
+    }
+
+    [Fact]
+    public async Task Discovery_ResponseModes_OnlyAdvertisesImplementedModes()
+    {
+        var response = await _client.GetAsync("/.well-known/openid-configuration");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var json = await ParseJson(response);
+        var responseModes = json.GetProperty("response_modes_supported")
+            .EnumerateArray()
+            .Select(e => e.GetString())
+            .ToList();
+        Assert.Equal(new[] { "query" }, responseModes);
+    }
+
+    [Fact]
     public async Task Discovery_AuthMethods_IncludeClientSecretBasic()
     {
         var response = await _client.GetAsync("/.well-known/openid-configuration");

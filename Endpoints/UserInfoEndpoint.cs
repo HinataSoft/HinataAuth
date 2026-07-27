@@ -47,8 +47,13 @@ public static class UserInfoEndpoint
 
     public static void MapUserInfoEndpoint(this WebApplication app)
     {
-        app.MapGet("/connect/userinfo", (HttpContext context) =>
-        {
+        // OIDC Core §5.3: the UserInfo endpoint must support both GET and POST
+        app.MapGet("/connect/userinfo", Handle).RequireAuthorization();
+        app.MapPost("/connect/userinfo", Handle).RequireAuthorization();
+    }
+
+    private static IResult Handle(HttpContext context)
+    {
             // Get user from authentication
             var user = context.User;
             if (user?.Identity?.IsAuthenticated != true)
@@ -115,6 +120,5 @@ public static class UserInfoEndpoint
             }
 
             return Results.Json(response);
-        }).RequireAuthorization();
     }
 }

@@ -37,7 +37,7 @@ public static class DiscoveryEndpoint
             ["token_endpoint"] = $"{issuer}/connect/token",
             ["jwks_uri"] = $"{issuer}/.well-known/jwks",
             ["response_types_supported"] = new[] { "code" },
-            ["response_modes_supported"] = new[] { "query", "form_post" },
+            ["response_modes_supported"] = new[] { "query" },
             ["grant_types_supported"] = new[] { "authorization_code", "client_credentials", "refresh_token" },
             ["subject_types_supported"] = new[] { "public" },
             ["id_token_signing_alg_values_supported"] = new[] { "RS256" },

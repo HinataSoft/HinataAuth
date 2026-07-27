@@ -14,11 +14,12 @@ public class AuthorizationCode
     public bool Used { get; set; }
     public string? CodeChallenge { get; set; }
     public string? CodeChallengeMethod { get; set; }
+    public string? Nonce { get; set; }
 }
 
 public interface IAuthorizationCodeStore
 {
-    AuthorizationCode CreateCode(string clientId, string redirectUri, string scope, string? userId, Dictionary<string, string>? userClaims = null, string? codeChallenge = null, string? codeChallengeMethod = null);
+    AuthorizationCode CreateCode(string clientId, string redirectUri, string scope, string? userId, Dictionary<string, string>? userClaims = null, string? codeChallenge = null, string? codeChallengeMethod = null, string? nonce = null);
     AuthorizationCode? ConsumeCode(string code, string clientId, string redirectUri);
     bool ValidateClient(string clientId, string? clientSecret = null);
     string? GetScopes(string clientId);
@@ -38,7 +39,7 @@ public class AuthorizationCodeStore : IAuthorizationCodeStore
         _clientStore = clientStore;
     }
 
-    public AuthorizationCode CreateCode(string clientId, string redirectUri, string scope, string? userId, Dictionary<string, string>? userClaims = null, string? codeChallenge = null, string? codeChallengeMethod = null)
+    public AuthorizationCode CreateCode(string clientId, string redirectUri, string scope, string? userId, Dictionary<string, string>? userClaims = null, string? codeChallenge = null, string? codeChallengeMethod = null, string? nonce = null)
     {
         var code = new AuthorizationCode
         {
@@ -51,7 +52,8 @@ public class AuthorizationCodeStore : IAuthorizationCodeStore
             ExpiresAt = DateTime.UtcNow.AddMinutes(_config.CodeExpirationMinutes),
             Used = false,
             CodeChallenge = codeChallenge,
-            CodeChallengeMethod = codeChallengeMethod
+            CodeChallengeMethod = codeChallengeMethod,
+            Nonce = nonce
         };
 
         lock (_lock)
